@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+pandas
+openpyxl
+python-multipart
+openai>=1.0.0
+anthropic>=0.30.0
+ddgs

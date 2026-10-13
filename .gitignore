@@ -1,0 +1,52 @@
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+.turbo/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs and local runtime output
+*.log
+logs/
+storage/generated/
+storage/exports/
+
+# Temporary files
+*.tmp
+*.tmp.xlsx
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Frontend local and generated files
+apps/web/.env.local
+apps/web/node_modules/
+apps/web/.next/
+apps/web/next-env.d.ts
+apps/web/*.tsbuildinfo
