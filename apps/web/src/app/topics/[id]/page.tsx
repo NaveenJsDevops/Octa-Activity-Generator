@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
+import { API_BASE_URL } from "@/lib/apiBase";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -25,8 +26,6 @@ import {
   Archive,
   XCircle
 } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface EditFormState {
   topic: string;
@@ -68,7 +67,7 @@ export default function TopicDetailPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_URL}/api/topics/${params.id}`);
+      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}`);
       if (!res.ok) throw new Error("Failed to fetch topic details");
       const json = await res.json();
       setData(json);
@@ -154,7 +153,7 @@ export default function TopicDetailPage() {
       .filter(Boolean);
 
     try {
-      const res = await fetch(`${API_URL}/api/topics/${params.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -191,7 +190,7 @@ export default function TopicDetailPage() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/topics/${params.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}`, {
         method: "DELETE",
       });
 
@@ -209,7 +208,7 @@ export default function TopicDetailPage() {
   const handleApprove = async () => {
     setActionError("");
     try {
-      const res = await fetch(`${API_URL}/api/topics/${params.id}/approve`, {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}/approve`, {
         method: "POST",
       });
       if (!res.ok) {

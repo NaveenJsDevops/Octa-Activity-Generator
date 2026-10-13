@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
+import { API_BASE_URL } from "@/lib/apiBase";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Search, XCircle, AlertCircle, FileText, ArrowRight, ChevronDown, RefreshCw } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Deterministic color mapping for topic families/types
 const TOPIC_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -71,7 +70,7 @@ export default function TopicsPage() {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const res = await fetch(`${API_URL}/api/topics`);
+      const res = await fetch(`${API_BASE_URL}/api/topics`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: Failed to fetch topics from backend API`);
       }
@@ -249,7 +248,7 @@ export default function TopicsPage() {
           <AlertCircle className="w-10 h-10 text-red-400 mb-4" />
           <h3 className="text-lg font-bold text-slate-900 mb-2">Unable to load topics</h3>
           <p className="text-slate-500 mb-2 text-sm">{errorMessage}</p>
-          <p className="text-slate-400 mb-6 text-xs">Verify backend is running at {API_URL}</p>
+          <p className="text-slate-400 mb-6 text-xs">Verify that the API service is reachable.</p>
           <button
             onClick={fetchTopics}
             className="px-5 py-2 bg-[#5B50F5] text-white rounded-xl font-medium hover:bg-[#4740d4] transition-colors shadow-sm text-sm"

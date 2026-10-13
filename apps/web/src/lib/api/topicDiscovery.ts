@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "@/lib/apiBase";
 
 export interface TopicDiscoveryRequest {
   keywords: string[];
@@ -28,7 +28,7 @@ export interface TopicDiscoveryResult {
 }
 
 export async function discoverTopics(request: TopicDiscoveryRequest): Promise<TopicDiscoveryResult> {
-  const res = await fetch(`${API_URL}/api/topics/discover`, {
+  const res = await fetch(`${API_BASE_URL}/api/topics/discover`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -51,7 +51,7 @@ export async function discoverTopics(request: TopicDiscoveryRequest): Promise<To
 }
 
 export async function keepCandidate(sessionId: string, index: number): Promise<any> {
-  const res = await fetch(`${API_URL}/api/topics/discovery/${sessionId}/keep/${index}`, {
+  const res = await fetch(`${API_BASE_URL}/api/topics/discovery/${sessionId}/keep/${index}`, {
     method: "POST"
   });
   if (!res.ok) {
@@ -66,7 +66,7 @@ export async function keepCandidate(sessionId: string, index: number): Promise<a
 }
 
 export async function rejectCandidate(sessionId: string, index: number): Promise<any> {
-  const res = await fetch(`${API_URL}/api/topics/discovery/${sessionId}/reject/${index}`, {
+  const res = await fetch(`${API_BASE_URL}/api/topics/discovery/${sessionId}/reject/${index}`, {
     method: "POST"
   });
   if (!res.ok) throw new Error("Failed to reject topic");
@@ -74,7 +74,7 @@ export async function rejectCandidate(sessionId: string, index: number): Promise
 }
 
 export async function keepAllCandidates(sessionId: string): Promise<any> {
-  const res = await fetch(`${API_URL}/api/topics/discovery/${sessionId}/keep-all`, {
+  const res = await fetch(`${API_BASE_URL}/api/topics/discovery/${sessionId}/keep-all`, {
     method: "POST"
   });
   if (!res.ok) throw new Error("Failed to keep all topics");

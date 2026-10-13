@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { Check, ChevronDown, Cpu, Activity, AlertCircle, CheckCircle2 } from "lucide-react";
 import { fetchAiSettings, fetchAiModels, invalidateCache } from "@/lib/apiCache";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE_URL } from "@/lib/apiBase";
 
 export function ModelSelector() {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,7 +34,7 @@ export function ModelSelector() {
     setIsUpdating(true);
     setTestStatus("idle");
     try {
-      const res = await fetch(`${API_URL}/api/settings/ai`, {
+      const res = await fetch(`${API_BASE_URL}/api/settings/ai`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model }),
@@ -60,7 +59,7 @@ export function ModelSelector() {
     setTestStatus("testing");
     setTestMessage("");
     try {
-      const res = await fetch(`${API_URL}/api/settings/ai/test`);
+      const res = await fetch(`${API_BASE_URL}/api/settings/ai/test`);
       const data = await res.json();
 
       if (data.status === "ok") {

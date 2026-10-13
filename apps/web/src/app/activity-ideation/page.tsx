@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 "use client";
 
+import { API_BASE_URL } from "@/lib/apiBase";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -21,8 +22,6 @@ import {
 import { ActivityConceptCard } from "@/components/activity-ideation/ActivityConceptCard";
 import { GenerationControls } from "@/components/activity-ideation/GenerationControls";
 import { Skeleton } from "@/components/activity-ideation/Skeleton";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function ActivityReviewContent() {
   const searchParams = useSearchParams();
@@ -53,7 +52,7 @@ function ActivityReviewContent() {
       setError("");
       try {
         const [topicResponse, savedConcepts] = await Promise.all([
-          fetch(`${API_URL}/api/topics/${encodeURIComponent(topicId)}`),
+          fetch(`${API_BASE_URL}/api/topics/${encodeURIComponent(topicId)}`),
           getConcepts(topicId),
         ]);
         if (!topicResponse.ok) throw new Error("Failed to load topic details");

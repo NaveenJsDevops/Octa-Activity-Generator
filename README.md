@@ -57,6 +57,20 @@ octa-ai-platform/
    npm run dev
    ```
 
+## Deployment: Vercel Frontend + Render API
+The frontend runs on Vercel and the FastAPI backend runs on Render with a persistent disk for Excel workbooks and generated files. The root `render.yaml` defines the API service and its disk:
+- Render builds from the repository root using `apps/api/requirements.txt` and runs `apps.api.main:app`.
+- The 1 GB persistent disk is mounted at `/var/data`; `DATA_DIR` and `STORAGE_DIR` point inside that mount so application data survives deploys and restarts.
+- The Render service uses the paid `starter` plan because Render persistent disks require a paid service.
+
+Deployment steps:
+1. Create a Render Blueprint from this repository and deploy the `octa-activity-api` service.
+2. In Render, set `FRONTEND_URL` to the deployed Vercel origin (for example, `https://your-app.vercel.app`), `GEMINI_API_KEY` to the provider key, and `ALLOWED_USERS` to the configured comma-separated `username:password` entries.
+3. In Vercel, import this repository and set the project **Root Directory** to `apps/web`.
+4. Add the Vercel environment variable `NEXT_PUBLIC_API_URL` with the Render service's public base URL, such as `https://octa-activity-api.onrender.com`, then redeploy. It is embedded into the frontend at build time.
+
+The frontend sends requests directly to the Render API, so Render CORS must allow the exact Vercel origin. The API's Excel files remain on Render's persistent disk. That disk is attached to one service instance and cannot be used for horizontal scaling; back up the data regularly.
+
 ## Development Commands
 - **Frontend linting**: `cd apps/web && npm run lint`
 - **Frontend type-check**: `cd apps/web && npx tsc --noEmit`

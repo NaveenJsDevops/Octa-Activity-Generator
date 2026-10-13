@@ -7,10 +7,7 @@
  * - Error isolation — a failed AI call does not affect topic/other calls
  */
 
-const API_URL =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
-    : "http://localhost:8000";
+import { API_BASE_URL } from "@/lib/apiBase";
 
 interface CacheEntry<T> {
   data: T;
@@ -74,15 +71,15 @@ export interface AiSettings {
 
 /** Health endpoint — used only to determine if AI is configured. */
 export function fetchHealth(): Promise<HealthData> {
-  return cachedFetch<HealthData>("health", `${API_URL}/api/health`);
+  return cachedFetch<HealthData>("health", `${API_BASE_URL}/api/health`);
 }
 
 /** AI settings — model name, provider, etc. */
 export function fetchAiSettings(): Promise<AiSettings> {
-  return cachedFetch<AiSettings>("ai_settings", `${API_URL}/api/settings/ai`);
+  return cachedFetch<AiSettings>("ai_settings", `${API_BASE_URL}/api/settings/ai`);
 }
 
 /** Available model list for the model switcher. */
 export function fetchAiModels(): Promise<{ models: string[] }> {
-  return cachedFetch<{ models: string[] }>("ai_models", `${API_URL}/api/settings/ai/models`);
+  return cachedFetch<{ models: string[] }>("ai_models", `${API_BASE_URL}/api/settings/ai/models`);
 }

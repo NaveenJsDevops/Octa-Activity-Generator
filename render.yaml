@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: octa-activity-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r apps/api/requirements.txt
+    startCommand: uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: octa-activity-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATA_DIR
+        value: /var/data/data
+      - key: STORAGE_DIR
+        value: /var/data/storage
+      - key: FRONTEND_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ALLOWED_USERS
+        sync: false
