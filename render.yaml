@@ -9,9 +9,9 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: DATA_DIR
-        value: /var/data/data
+        value: /tmp/octa-data
       - key: STORAGE_DIR
-        value: /var/data/storage
+        value: /tmp/octa-storage
       - key: FRONTEND_URL
         sync: false
       - key: GEMINI_API_KEY
