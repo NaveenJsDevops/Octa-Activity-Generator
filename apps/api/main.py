@@ -14,12 +14,14 @@ from apps.api.routers.activities import router as activities_router
 from apps.api.routers.master import router as master_router
 from apps.api.routers.settings import router as settings_router
 from apps.api.repositories.excel import ExcelRepository
+from apps.api.services.master_data import ensure_default_topic_families
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize excel workbooks safely on startup
     repo = ExcelRepository(settings.DATA_DIR)
     repo.initialize_workbooks()
+    ensure_default_topic_families(repo)
     yield
 
 app = FastAPI(

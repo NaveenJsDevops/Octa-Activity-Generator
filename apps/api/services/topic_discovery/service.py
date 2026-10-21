@@ -5,7 +5,8 @@ from typing import List, Optional, Dict, Any
 from apps.api.repositories.excel import ExcelRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.services.ai.prompts.registry import PromptRegistry, PromptTemplate
-from apps.api.models.domain import Topic, TopicSkill, TopicKeyword, TopicFamily, Intelligence, Skill, SubSkill
+from apps.api.models.domain import Topic, TopicSkill, TopicKeyword, Intelligence, Skill, SubSkill
+from apps.api.core.topic_families import TOPIC_FAMILY_NAMES
 from apps.api.models.enums import TopicStatus, RelationshipType
 from apps.api.models.topic_discovery import (
     TopicDiscoveryRequest, TopicCandidate, TopicDiscoveryOutput, 
@@ -55,14 +56,9 @@ class TopicDiscoveryService:
         """Performs web research and AI generation to yield temporary candidates."""
         topic_family_name = "Any"
         if request.topic_family_id:
-            topic_families = self.excel_repo.read_sheet("TopicFamilies")
-            topic_family = next(
-                (family for family in topic_families if family["topic_family_id"] == request.topic_family_id),
-                None,
-            )
-            if topic_family is None:
+            topic_family_name = TOPIC_FAMILY_NAMES.get(request.topic_family_id, "")
+            if not topic_family_name:
                 raise ValueError(f"topic_family_id {request.topic_family_id} does not exist")
-            topic_family_name = topic_family["name"]
 
         keyword_context = self.keyword_builder.build_context(request)
         

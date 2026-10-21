@@ -10,7 +10,7 @@ from apps.api.services.topic_discovery.service import TopicDiscoveryService
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.repositories.excel import ExcelRepository
 from apps.api.services.ai.prompts.registry import PromptRegistry, PromptTemplate
-from apps.api.models.domain import TopicFamily, Skill, SubSkill, Topic
+from apps.api.models.domain import Skill, SubSkill
 
 @pytest.fixture
 def temp_data_dir():
@@ -24,7 +24,7 @@ def excel_repo(temp_data_dir):
     repo.initialize_workbooks()
     
     # Populate some dummy master data
-    repo.append_record("TopicFamilies", {"topic_family_id": "TF-001", "name": "Science & Nature"})
+    repo.append_record("TopicFamilies", {"topic_family_id": "tf-science-technology", "name": "Science & Technology"})
     repo.append_record("Skills", {"skill_id": "SK-001", "intelligence_id": "INT-001", "name": "Observation"})
     repo.append_record("SubSkills", {"sub_skill_id": "SS-001", "skill_id": "SK-001", "name": "Visual Analysis"})
     
@@ -59,7 +59,7 @@ def test_successful_topic_discovery(service, orchestrator, excel_repo):
         age_max=7,
         keywords=["test"],
         skill_id="SK-001",
-        topic_family_id="TF-001",
+        topic_family_id="tf-science-technology",
         requested_count=2
     )
     
@@ -93,7 +93,7 @@ def test_successful_topic_discovery(service, orchestrator, excel_repo):
     excel_repo.append_record("GenerationRuns", {"generation_id": "gen-123", "generation_type": "TOPIC_DISCOVERY", "model": "gpt", "prompt_version": "v1.0", "started_at": datetime.now(), "status": "COMPLETED"})
     
     result = service.discover_topics(request)
-    assert "Topic family: Science & Nature" in orchestrator.generate_structured.call_args.kwargs["prompt"]
+    assert "Topic family: Science & Technology" in orchestrator.generate_structured.call_args.kwargs["prompt"]
     
     assert "session_id" in result
     session_id = result["session_id"]
@@ -111,7 +111,7 @@ def test_successful_topic_discovery(service, orchestrator, excel_repo):
     assert len(saved_topics) == 1
     assert saved_topics[0]["topic_id"] == "TOP-000001"
     assert saved_topics[0]["topic"] == "Space Explorers"
-    assert saved_topics[0]["topic_family_id"] == "TF-001"
+    assert saved_topics[0]["topic_family_id"] == "tf-science-technology"
     
 
     saved_keywords = excel_repo.read_sheet("TopicKeywords")
@@ -130,10 +130,24 @@ def test_discovery_rejects_unknown_topic_family(service, orchestrator):
 
     orchestrator.generate_structured.assert_not_called()
 
+
+def test_discovery_without_topic_family_is_allowed(service, orchestrator):
+    request = TopicDiscoveryRequest(
+        age_min=5,
+        age_max=7,
+        keywords=["animals"],
+        requested_count=1,
+    )
+    orchestrator.generate_structured.return_value = TopicDiscoveryOutput(topics=[])
+
+    service.discover_topics(request)
+
+    assert "Topic family: Any" in orchestrator.generate_structured.call_args.kwargs["prompt"]
+
 def test_duplicate_detection(service, orchestrator, excel_repo):
     # Existing topic
     excel_repo.append_record("Topics", {
-        "topic_id": "TOP-000001", "topic": "Space Explorers", "topic_family_id": "TF-001",
+        "topic_id": "TOP-000001", "topic": "Space Explorers", "topic_family_id": "tf-science-technology",
         "age_min": 5, "age_max": 7, "created_at": datetime.now(), "updated_at": datetime.now(),
         "created_by": "system", "status": "DRAFT"
     })
@@ -174,6 +188,8 @@ def test_duplicate_detection(service, orchestrator, excel_repo):
     assert "duplicate" in results[0]["reason"].lower()
     
     assert results[1]["status"] == "kept"
+    saved_topics = excel_repo.read_sheet("Topics")
+    assert saved_topics[1]["topic_family_id"] is None
     
     assert results[2]["status"] == "rejected"
     assert "duplicate" in results[2]["reason"].lower()

@@ -5,71 +5,9 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from apps.api.core.config import settings
+from apps.api.core.topic_families import DEFAULT_TOPIC_FAMILIES
 from apps.api.repositories.excel import ExcelRepository
-from apps.api.models.domain import TopicFamily, Skill, SubSkill, ActivityType
-
-DEFAULT_TOPIC_FAMILIES = [
-    {
-        "topic_family_id": "tf-001",
-        "name": "Space Exploration",
-        "description": "Topics related to space, planets, and astronomy",
-    },
-    {
-        "topic_family_id": "tf-animals-wildlife",
-        "name": "Animals & Wildlife",
-        "description": "Animals, habitats, biodiversity, and wildlife conservation",
-    },
-    {
-        "topic_family_id": "tf-nature-environment",
-        "name": "Nature & Environment",
-        "description": "Plants, ecosystems, weather, and caring for the environment",
-    },
-    {
-        "topic_family_id": "tf-science-technology",
-        "name": "Science & Technology",
-        "description": "Science experiments, inventions, engineering, and technology",
-    },
-    {
-        "topic_family_id": "tf-arts-creativity",
-        "name": "Arts & Creativity",
-        "description": "Visual arts, music, design, storytelling, and creative expression",
-    },
-    {
-        "topic_family_id": "tf-culture-community",
-        "name": "Culture & Community",
-        "description": "Cultures, traditions, relationships, and the communities around us",
-    },
-    {
-        "topic_family_id": "tf-history-geography",
-        "name": "History & Geography",
-        "description": "People, places, maps, landmarks, and events from the past",
-    },
-    {
-        "topic_family_id": "tf-health-wellbeing",
-        "name": "Health & Wellbeing",
-        "description": "Healthy habits, emotions, mindfulness, and personal wellbeing",
-    },
-    {
-        "topic_family_id": "tf-food-nutrition",
-        "name": "Food & Nutrition",
-        "description": "Food, cooking, nutrition, and how food gets to our tables",
-    },
-    {
-        "topic_family_id": "tf-sports-movement",
-        "name": "Sports & Movement",
-        "description": "Sports, physical activity, coordination, and teamwork",
-    },
-    {
-        "topic_family_id": "tf-math-logic",
-        "name": "Math & Logic",
-        "description": "Numbers, patterns, puzzles, and logical problem-solving",
-    },
-    {
-        "topic_family_id": "tf-language-literacy",
-        "name": "Language & Literacy",
-        "description": "Reading, writing, communication, and learning new languages",
-    },
-]
+from apps.api.services.master_data import ensure_default_topic_families
 
 
 def initialize():
@@ -82,13 +20,8 @@ def initialize():
     repo.initialize_workbooks()
     print("Workbooks and sheets initialized successfully.")
     
-    # Seed missing default families without replacing configured records.
-    families = repo.read_sheet("TopicFamilies")
-    existing_family_ids = {family["topic_family_id"] for family in families}
-    for family in DEFAULT_TOPIC_FAMILIES:
-        if family["topic_family_id"] not in existing_family_ids:
-            repo.append_record("TopicFamilies", family)
-            print(f"Added topic family: {family['name']}")
+    ensure_default_topic_families(repo)
+    print("Default topic families are ready.")
         
     skills = repo.read_sheet("Skills")
     if not skills:

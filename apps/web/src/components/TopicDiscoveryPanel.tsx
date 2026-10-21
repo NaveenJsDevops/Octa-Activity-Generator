@@ -1,15 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Search, Sparkles, Loader2, AlertCircle, X, Check, Globe, CheckCircle, ArrowRight } from "lucide-react";
 import { discoverTopics, keepCandidate, rejectCandidate, keepAllCandidates, TopicDiscoveryRequest, TopicDiscoveryResult } from "@/lib/api/topicDiscovery";
-import { API_BASE_URL } from "@/lib/apiBase";
 
-interface TopicFamily {
-  topic_family_id: string;
-  name: string;
-}
+const TOPIC_FAMILIES = [
+  { topic_family_id: "tf-001", name: "Space Exploration" },
+  { topic_family_id: "tf-animals-wildlife", name: "Animals & Wildlife" },
+  { topic_family_id: "tf-nature-environment", name: "Nature & Environment" },
+  { topic_family_id: "tf-science-technology", name: "Science & Technology" },
+  { topic_family_id: "tf-arts-creativity", name: "Arts & Creativity" },
+  { topic_family_id: "tf-culture-community", name: "Culture & Community" },
+  { topic_family_id: "tf-history-geography", name: "History & Geography" },
+  { topic_family_id: "tf-health-wellbeing", name: "Health & Wellbeing" },
+  { topic_family_id: "tf-food-nutrition", name: "Food & Nutrition" },
+  { topic_family_id: "tf-sports-movement", name: "Sports & Movement" },
+  { topic_family_id: "tf-math-logic", name: "Math & Logic" },
+  { topic_family_id: "tf-language-literacy", name: "Language & Literacy" },
+];
 
 const CLASS_OPTIONS = ["Grade 6", "Grade 7", "Grade 8", "Grade 9"];
 
@@ -28,10 +37,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   const [targetClass, setTargetClass] = useState<string>("Grade 9");
   const [countryContext, setCountryContext] = useState("India");
   const [requestedCount, setRequestedCount] = useState(1);
-  const [topicFamilies, setTopicFamilies] = useState<TopicFamily[]>([]);
   const [topicFamilyId, setTopicFamilyId] = useState("");
-  const [topicFamiliesLoading, setTopicFamiliesLoading] = useState(true);
-  const [topicFamiliesError, setTopicFamiliesError] = useState("");
 
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -41,43 +47,6 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   const [candidateErrors, setCandidateErrors] = useState<Record<number, string>>({});
 
   const [showResearch, setShowResearch] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadTopicFamilies = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/master`);
-        if (!response.ok) {
-          throw new Error("Unable to load topic families from the database.");
-        }
-
-        const masterData = await response.json();
-        const families = Array.isArray(masterData.topicFamilies) ? masterData.topicFamilies : [];
-        if (!families.length) {
-          throw new Error("No topic families are configured. Add a topic family before generating topics.");
-        }
-
-        if (!cancelled) {
-          setTopicFamilies(families);
-          setTopicFamilyId(families[0].topic_family_id);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setTopicFamiliesError(err instanceof Error ? err.message : "Unable to load topic families.");
-        }
-      } finally {
-        if (!cancelled) {
-          setTopicFamiliesLoading(false);
-        }
-      }
-    };
-
-    void loadTopicFamilies();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleAddKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
@@ -108,11 +77,6 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
       return;
     }
 
-    if (!topicFamilyId) {
-      setError("Select a topic family before generating topics.");
-      return;
-    }
-
     setError("");
     setGenerating(true);
     setSession(null);
@@ -127,7 +91,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
         age_max: ageMax,
         target_class: targetClass || undefined,
         country_context: countryContext || undefined,
-        topic_family_id: topicFamilyId,
+        topic_family_id: topicFamilyId || undefined,
         requested_count: requestedCount,
       };
 
@@ -316,19 +280,16 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
               id="topic-family"
               value={topicFamilyId}
               onChange={e => setTopicFamilyId(e.target.value)}
-              disabled={generating || topicFamiliesLoading || !!topicFamiliesError}
+              disabled={generating}
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
             >
-              <option value="">
-                {topicFamiliesLoading ? "Loading topic families..." : "Select a topic family"}
-              </option>
-              {topicFamilies.map(family => (
+              <option value="">Any topic family (optional)</option>
+              {TOPIC_FAMILIES.map(family => (
                 <option key={family.topic_family_id} value={family.topic_family_id}>
                   {family.name}
                 </option>
               ))}
             </select>
-            {topicFamiliesError && <p role="alert" className="mt-1.5 text-xs text-red-600">{topicFamiliesError}</p>}
           </div>
 
           {/* Country Context */}
@@ -366,7 +327,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
       <div className="flex justify-center">
         <button
           onClick={handleGenerate}
-          disabled={generating || aiConfigured === false || topicFamiliesLoading || !!topicFamiliesError || !topicFamilyId}
+          disabled={generating || aiConfigured === false}
           className="flex items-center gap-2.5 px-8 py-3.5 bg-[#5B50F5] hover:bg-[#4740d4] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors shadow-md shadow-indigo-200 text-[15px]"
         >
           {generating ? (

@@ -86,6 +86,7 @@ The frontend sends requests directly to the Render API, so Render CORS must allo
 - Comprehensive testing suite configured and passing for the repository layer.
 
 ## Activity Generation Workflow
+- Topic discovery's Topic Family choices are hardcoded in the app and optional; leaving the field as “Any topic family” generates topics without assigning a family.
 - Draft topics can be edited and approved directly, or moved through `REVIEW` before approval. The Activity Generation screen lists only `APPROVED` or `SELECTED` topics; after approving a topic, refresh the list if that screen is already open.
 - AI results are structured and validated, and remain temporary in the API process until a user action.
 - Edit, regenerate, and reject operate on temporary review-session concepts. Approval writes the `APPROVED` concept and its `APPROVED` activity to `Octa_Activities.xlsx`; supported topic skill mappings are written alongside them.
