@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import TopicGenerateScreen from "@/components/TopicGenerateScreen";
 
 export default function Home() {
-  redirect('/topics/generate');
+  return <TopicGenerateScreen />;
 }

@@ -1,22 +1,5 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import TopicDiscoveryPanel from "@/components/TopicDiscoveryPanel";
-import { fetchHealth } from "@/lib/apiCache";
+import TopicGenerateScreen from "@/components/TopicGenerateScreen";
 
 export default function TopicGeneratePage() {
-  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    fetchHealth()
-      .then(data => setAiConfigured(data.ai?.configured ?? false))
-      .catch(() => setAiConfigured(false));
-  }, []);
-
-  return (
-    <TopicDiscoveryPanel
-      onTopicsGenerated={() => {}}
-      aiConfigured={aiConfigured}
-    />
-  );
+  return <TopicGenerateScreen />;
 }
