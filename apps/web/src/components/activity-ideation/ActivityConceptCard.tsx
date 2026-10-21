@@ -4,7 +4,8 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { ActivityConcept, MainActivity, PostActivity, PreActivity } from "@/lib/api/activityIdeation";
 import { ActivityTemplateView } from "@/components/activity-ideation/ActivityTemplateView";
-import { Check, Pencil, RefreshCw, X } from "lucide-react";
+import { CalendarClock, Check, Pencil, RefreshCw, X } from "lucide-react";
+import { formatDateTime } from "@/lib/dateTime";
 
 interface Props {
   concept: ActivityConcept;
@@ -85,6 +86,12 @@ export function ActivityConceptCard({
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-5 py-3">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{concept.activity_type_id}</span>
         <div className="flex items-center gap-2">
+          {formatDateTime(concept.created_at) && (
+            <time dateTime={concept.created_at} className="inline-flex items-center gap-1 text-xs text-slate-500">
+              <CalendarClock className="h-3.5 w-3.5" />
+              Generated {formatDateTime(concept.created_at)}
+            </time>
+          )}
           <span className="text-[10px] font-medium text-slate-500">
             {concept.status === "TEMPORARY" ? "Unsaved review result" : concept.status === "APPROVED" ? "Saved to Activity Library" : "Not saved"}
           </span>

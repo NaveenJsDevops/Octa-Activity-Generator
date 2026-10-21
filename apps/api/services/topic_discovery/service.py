@@ -53,6 +53,17 @@ class TopicDiscoveryService:
 
     def discover_topics(self, request: TopicDiscoveryRequest, generated_by: str = "system") -> Dict[str, Any]:
         """Performs web research and AI generation to yield temporary candidates."""
+        topic_family_name = "Any"
+        if request.topic_family_id:
+            topic_families = self.excel_repo.read_sheet("TopicFamilies")
+            topic_family = next(
+                (family for family in topic_families if family["topic_family_id"] == request.topic_family_id),
+                None,
+            )
+            if topic_family is None:
+                raise ValueError(f"topic_family_id {request.topic_family_id} does not exist")
+            topic_family_name = topic_family["name"]
+
         keyword_context = self.keyword_builder.build_context(request)
         
         # Web Research
@@ -68,6 +79,7 @@ class TopicDiscoveryService:
             age_max=request.age_max,
             target_class=request.target_class or "N/A",
             country_context=request.country_context or "Global",
+            topic_family_name=topic_family_name,
             requested_count=request.requested_count,
             keyword_context=json.dumps(keyword_context),
             web_research_context=web_research_context
@@ -123,7 +135,7 @@ class TopicDiscoveryService:
             topic_id=new_topic_id,
             topic=candidate.topic,
             short_description=candidate.short_description,
-            topic_family_id=None,
+            topic_family_id=request.topic_family_id,
             age_min=request.age_min,
             age_max=request.age_max,
             target_class=request.target_class,

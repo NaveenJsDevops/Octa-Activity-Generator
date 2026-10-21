@@ -6,6 +6,7 @@ class TopicDiscoveryRequest(BaseModel):
     age_max: int = Field(..., ge=0)
     target_class: Optional[str] = None
     country_context: Optional[str] = None
+    topic_family_id: Optional[str] = None
     requested_count: int = Field(default=5, gt=0, le=20)
     keywords: List[str] = Field(default_factory=list)
 

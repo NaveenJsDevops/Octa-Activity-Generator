@@ -16,7 +16,7 @@ Backend:
 - FastAPI
 
 Persistence:
-- Excel files only
+- SQLite database as the primary source of truth
 
 File storage:
 - Local filesystem only
@@ -46,7 +46,7 @@ DO NOT introduce:
 - JWT
 - External authentication services
 
-Excel is the source of truth for application data.
+SQLite is the source of truth for application data.
 
 Local filesystem is the source of truth for generated files.
 

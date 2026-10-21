@@ -36,7 +36,7 @@ def prompt_registry():
     registry.register_prompt(PromptTemplate(
         prompt_name="topic_discovery",
         version="v1.1",
-        user_prompt_template="Test",
+        user_prompt_template="Topic family: {topic_family_name}",
         created_at=datetime.now()
     ))
     return registry
@@ -59,6 +59,7 @@ def test_successful_topic_discovery(service, orchestrator, excel_repo):
         age_max=7,
         keywords=["test"],
         skill_id="SK-001",
+        topic_family_id="TF-001",
         requested_count=2
     )
     
@@ -92,6 +93,7 @@ def test_successful_topic_discovery(service, orchestrator, excel_repo):
     excel_repo.append_record("GenerationRuns", {"generation_id": "gen-123", "generation_type": "TOPIC_DISCOVERY", "model": "gpt", "prompt_version": "v1.0", "started_at": datetime.now(), "status": "COMPLETED"})
     
     result = service.discover_topics(request)
+    assert "Topic family: Science & Nature" in orchestrator.generate_structured.call_args.kwargs["prompt"]
     
     assert "session_id" in result
     session_id = result["session_id"]
@@ -109,10 +111,24 @@ def test_successful_topic_discovery(service, orchestrator, excel_repo):
     assert len(saved_topics) == 1
     assert saved_topics[0]["topic_id"] == "TOP-000001"
     assert saved_topics[0]["topic"] == "Space Explorers"
+    assert saved_topics[0]["topic_family_id"] == "TF-001"
     
 
     saved_keywords = excel_repo.read_sheet("TopicKeywords")
     assert len(saved_keywords) == 2 
+
+def test_discovery_rejects_unknown_topic_family(service, orchestrator):
+    request = TopicDiscoveryRequest(
+        age_min=5,
+        age_max=7,
+        topic_family_id="TF-UNKNOWN",
+        requested_count=1,
+    )
+
+    with pytest.raises(ValueError, match="topic_family_id TF-UNKNOWN does not exist"):
+        service.discover_topics(request)
+
+    orchestrator.generate_structured.assert_not_called()
 
 def test_duplicate_detection(service, orchestrator, excel_repo):
     # Existing topic

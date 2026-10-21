@@ -8,6 +8,7 @@ export interface TopicDiscoveryRequest {
   age_max: number;
   target_class?: string;
   country_context?: string;
+  topic_family_id?: string;
   requested_count: number;
 }
 

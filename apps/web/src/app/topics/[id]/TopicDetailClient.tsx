@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { API_BASE_URL } from "@/lib/apiBase";
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -23,9 +22,10 @@ import {
   Save,
   CheckCircle,
   Search,
-  Archive,
-  XCircle
+  XCircle,
+  CalendarClock,
 } from "lucide-react";
+import { formatDateTime } from "@/lib/dateTime";
 
 interface EditFormState {
   topic: string;
@@ -39,8 +39,7 @@ interface EditFormState {
   keywordsInput: string;
 }
 
-export default function TopicDetailPage() {
-  const params = useParams();
+export default function TopicDetailClient({ topicId }: { topicId: string }) {
   const router = useRouter();
 
   const [data, setData] = useState<any>(null);
@@ -67,7 +66,7 @@ export default function TopicDetailPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}`);
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}`);
       if (!res.ok) throw new Error("Failed to fetch topic details");
       const json = await res.json();
       setData(json);
@@ -93,13 +92,13 @@ export default function TopicDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [params.id]);
+  }, [topicId]);
 
   useEffect(() => {
-    if (params.id) {
+    if (topicId) {
       fetchDetail();
     }
-  }, [params.id, fetchDetail]);
+  }, [topicId, fetchDetail]);
 
   const handleStartEdit = () => {
     if (!data) return;
@@ -153,7 +152,7 @@ export default function TopicDetailPage() {
       .filter(Boolean);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -183,20 +182,19 @@ export default function TopicDetailPage() {
     }
   };
 
-  // Rejecting topic: deletes the record from Excel as requested
   const handleReject = async () => {
-    if (!confirm("Are you sure you want to reject this topic?\n\nThis will permanently delete the record from Excel.")) {
+    if (!confirm("Are you sure you want to reject this topic?\n\nThis will permanently delete the record from the database.")) {
       return;
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}`, {
         method: "DELETE",
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Failed to delete topic from Excel");
+        throw new Error(errorData.detail || "Failed to delete topic from the database");
       }
 
       router.push("/topics/library");
@@ -208,7 +206,7 @@ export default function TopicDetailPage() {
   const handleApprove = async () => {
     setActionError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/topics/${params.id}/approve`, {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}/approve`, {
         method: "POST",
       });
       if (!res.ok) {
@@ -260,19 +258,17 @@ export default function TopicDetailPage() {
   }
 
   const topic = data.topic || {};
+  const createdAt = formatDateTime(topic.created_at);
   const status = (topic.status || "DRAFT").toUpperCase();
   const keywords: string[] = data.keywords || [];
   const topicFamily = data.topic_family_name || "Space Exploration";
 
-  // Description text: check full_description first, then short_description, why_interesting, topic_hook
   const descriptionText: string =
     topic.full_description || topic.short_description || topic.why_interesting || topic.topic_hook || "";
 
   const paragraphs: string[] = descriptionText
     ? descriptionText.split(/\n+/).filter(Boolean)
-    : [
-        "No description provided for this topic yet. Click Edit to add details.",
-      ];
+    : ["No description provided for this topic yet. Click Edit to add details."];
 
   const getStatusIcon = () => {
     switch (status) {
@@ -291,7 +287,6 @@ export default function TopicDetailPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      {/* Back button */}
       <div>
         <Link
           href="/topics/library"
@@ -302,7 +297,6 @@ export default function TopicDetailPage() {
         </Link>
       </div>
 
-      {/* Action error banner */}
       {actionError && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl flex items-center justify-between text-sm shadow-sm">
           <div className="flex items-center gap-2">
@@ -315,18 +309,20 @@ export default function TopicDetailPage() {
         </div>
       )}
 
-      {/* Main Card */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-8 md:p-10 space-y-6">
-        {/* Card Header */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
           <div className="flex-1 space-y-3">
-            {/* Status pill */}
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border border-slate-200 bg-white text-slate-700 shadow-xs">
               {getStatusIcon()}
               <span>{status}</span>
             </div>
+            {createdAt && (
+              <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                <CalendarClock className="h-3.5 w-3.5" />
+                <time dateTime={topic.created_at}>Created {createdAt}</time>
+              </p>
+            )}
 
-            {/* Title: Label in View Mode, Input Box in Edit Mode */}
             {editing ? (
               <div>
                 <input
@@ -344,7 +340,6 @@ export default function TopicDetailPage() {
             )}
           </div>
 
-          {/* Action buttons (top right) */}
           <div className="flex flex-col items-start md:items-end gap-2 shrink-0">
             {editing ? (
               <div className="flex items-center gap-2">
@@ -379,7 +374,6 @@ export default function TopicDetailPage() {
                   </div>
                 )}
 
-                {/* Reject Button: Deletes record from Excel */}
                 <button
                   onClick={handleReject}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 font-semibold rounded-xl text-sm transition-colors shadow-xs"
@@ -388,7 +382,6 @@ export default function TopicDetailPage() {
                   Reject
                 </button>
 
-                {/* Edit Button */}
                 <button
                   onClick={handleStartEdit}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold rounded-xl text-sm transition-colors shadow-xs"
@@ -401,9 +394,7 @@ export default function TopicDetailPage() {
           </div>
         </div>
 
-        {/* 2-Column Body Grid: Same layout in both View and Edit mode */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-          {/* Left Column: Topic Description (2 cols) */}
           <div className="lg:col-span-2 bg-[#FBFBFF] border border-slate-200/80 rounded-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
               <FileText className="w-5 h-5 text-[#5B50F5]" />
@@ -427,7 +418,6 @@ export default function TopicDetailPage() {
             )}
           </div>
 
-          {/* Right Column: Topic Details (1 col) */}
           <div className="lg:col-span-1 bg-[#FBFBFF] border border-slate-200/80 rounded-2xl p-6 space-y-5">
             <div className="flex items-center gap-2 text-slate-900 font-bold text-base">
               <Sliders className="w-5 h-5 text-[#5B50F5]" />
@@ -435,7 +425,6 @@ export default function TopicDetailPage() {
             </div>
 
             <div className="space-y-4 pt-1">
-              {/* Item 1: Topic Family */}
               <div className="flex items-start gap-3">
                 <Layers className="w-4 h-4 text-[#5B50F5] mt-1 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -449,14 +438,11 @@ export default function TopicDetailPage() {
                       className="mt-1 w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
                     />
                   ) : (
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
-                      {topicFamily}
-                    </p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">{topicFamily}</p>
                   )}
                 </div>
               </div>
 
-              {/* Item 2: Learner Age Range */}
               <div className="flex items-start gap-3">
                 <Users className="w-4 h-4 text-[#5B50F5] mt-1 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -490,7 +476,6 @@ export default function TopicDetailPage() {
                 </div>
               </div>
 
-              {/* Item 3: Country / Context */}
               <div className="flex items-start gap-3">
                 <MapPin className="w-4 h-4 text-[#5B50F5] mt-1 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -511,7 +496,6 @@ export default function TopicDetailPage() {
                 </div>
               </div>
 
-              {/* Item 4: Activity Potential */}
               <div className="flex items-start gap-3">
                 <Zap className="w-4 h-4 text-[#5B50F5] mt-1 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -536,7 +520,6 @@ export default function TopicDetailPage() {
                 </div>
               </div>
 
-              {/* Item 5: Keywords */}
               <div className="flex items-start gap-3">
                 <Tag className="w-4 h-4 text-[#5B50F5] mt-1 shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -552,7 +535,7 @@ export default function TopicDetailPage() {
                   ) : (
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {keywords.length > 0 ? (
-                        keywords.map(kw => (
+                        keywords.map((kw: string) => (
                           <span
                             key={kw}
                             className="px-2.5 py-1 bg-[#EEF0FF] text-[#5B50F5] rounded-full text-xs font-medium"
@@ -571,7 +554,6 @@ export default function TopicDetailPage() {
           </div>
         </div>
 
-        {/* Bottom Update/Cancel button in edit mode */}
         {editing && (
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
             <button
@@ -586,7 +568,7 @@ export default function TopicDetailPage() {
               disabled={saving}
               className="px-6 py-2.5 bg-[#5B50F5] hover:bg-[#4740d4] text-white font-semibold rounded-xl text-sm transition-colors shadow-sm disabled:opacity-50"
             >
-              {saving ? "Updating..." : "Update Topic"}
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
         )}

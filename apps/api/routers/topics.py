@@ -26,7 +26,7 @@ def get_prompt_registry() -> PromptRegistry:
         system_prompt="You are an expert curriculum designer for Octa Kids. Generate engaging, unique activity topics.",
         user_prompt_template=(
             "Generate {requested_count} topic candidates for age {age_min} to {age_max} (Class: {target_class}). "
-            "Context: {country_context}. "
+            "Topic family: {topic_family_name}. Context: {country_context}. "
             "Use these keywords for inspiration: {keyword_context}. "
             "Web Research Info to guide topics:\n{web_research_context}\n"
             "Ensure topics are highly engaging and suitable for the age group. "

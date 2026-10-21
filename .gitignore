@@ -27,6 +27,9 @@ env/
 .ruff_cache/
 .coverage
 htmlcov/
+*.db
+*.sqlite
+*.sqlite3
 
 # Logs and local runtime output
 *.log

@@ -7,7 +7,7 @@ The Octa AI Activity Platform is a local-first, AI-powered application designed 
 The platform uses a decoupled frontend-backend architecture:
 - **Frontend**: Next.js (React + TypeScript) for user interactions, workflow management, and UI dashboards.
 - **Backend**: FastAPI (Python) for business logic, interacting with AI models, managing local storage, and processing data.
-- **Data Persistence**: Excel files act as the single source of truth for all structured data (topics, activities). No relational databases are used.
+- **Data Persistence**: SQLite is the single source of truth for structured application data (topics, activities, generation logs, and master reference records).
 - **File Storage**: Generated content and drafts are stored securely on the local filesystem.
 
 ## Technology Stack
@@ -15,17 +15,18 @@ The platform uses a decoupled frontend-backend architecture:
 - **Backend**: Python 3+, FastAPI, Pydantic, Pandas, OpenPyXL
 - **AI Integration**: Designed with an `AIProvider` abstraction to support multiple AI backends (e.g., OpenAI, Gemini).
 
-## Directory Structure & Excel Locations
+## Directory Structure & Data Locations
 ```
 octa-ai-platform/
   apps/
     web/          # Next.js frontend application
     api/          # FastAPI backend application
   data/
-    master/       # Octa_Master.xlsx (Skills, TopicFamilies, etc)
-    topics/       # Octa_Topics.xlsx (Topics, Keywords, Sources)
-    activities/   # Octa_Activities.xlsx (Concepts, Activities, Checks)
-    ai/           # Octa_AI_Logs.xlsx (Generation Runs)
+    octa.db       # SQLite database containing master data, topics, activities, and generation logs
+    master/       # Legacy workbook placeholders, retained for compatibility and exports
+    topics/       # Legacy workbook placeholders, retained for compatibility and exports
+    activities/   # Legacy workbook placeholders, retained for compatibility and exports
+    ai/           # Legacy workbook placeholders, retained for compatibility and exports
   storage/
     drafts/       # In-progress activity generations
     generated/    # Finalized generations pending approval
@@ -58,7 +59,7 @@ octa-ai-platform/
    ```
 
 ## Deployment: Vercel Frontend + Render API
-The frontend runs on Vercel and the FastAPI backend runs on Render with a persistent disk for Excel workbooks and generated files. The root `render.yaml` defines the API service and its disk:
+The frontend runs on Vercel and the FastAPI backend runs on Render with a persistent disk for the SQLite database and generated files. The root `render.yaml` defines the API service and its disk:
 - Render builds from the repository root using `apps/api/requirements.txt` and runs `apps.api.main:app`.
 - The 1 GB persistent disk is mounted at `/var/data`; `DATA_DIR` and `STORAGE_DIR` point inside that mount so application data survives deploys and restarts.
 - The Render service uses the paid `starter` plan because Render persistent disks require a paid service.
@@ -69,7 +70,7 @@ Deployment steps:
 3. In Vercel, import this repository and set the project **Root Directory** to `apps/web`.
 4. Add the Vercel environment variable `NEXT_PUBLIC_API_URL` with the Render service's public base URL, such as `https://octa-activity-api.onrender.com`, then redeploy. It is embedded into the frontend at build time.
 
-The frontend sends requests directly to the Render API, so Render CORS must allow the exact Vercel origin. The API's Excel files remain on Render's persistent disk. That disk is attached to one service instance and cannot be used for horizontal scaling; back up the data regularly.
+The frontend sends requests directly to the Render API, so Render CORS must allow the exact Vercel origin. The SQLite database and generated files remain on Render's persistent disk. That disk is attached to one service instance and cannot be used for horizontal scaling; back up the data regularly.
 
 ## Development Commands
 - **Frontend linting**: `cd apps/web && npm run lint`
@@ -78,13 +79,13 @@ The frontend sends requests directly to the Render API, so Render CORS must allo
 - **Backend unit tests**: `cd apps/api && PYTHONPATH=../../ pytest tests/`
 
 ## Current Implementation Status
-**Phase 1 Complete**: Domain Models & Excel Persistence.
+**Phase 1 Complete**: Domain Models & SQLite Persistence.
 - Strict Pydantic domain models implemented (`apps/api/models/domain.py`).
 - Controlled vocabularies established via Enums.
-- ExcelRepository implemented with robust pandas abstraction.
+- DatabaseRepository implemented with SQLite persistence and compatibility wrappers for the existing repository interface.
 - Application-level schema validation and relationship checks (Foreign Keys) enforced.
 - Master data initialization script provided (`apps/api/scripts/init_master_data.py`).
-- Comprehensive testing suite configured and passing for the Excel Repository.
+- Comprehensive testing suite configured and passing for the repository layer.
 
 ## Activity Generation Workflow
 - Draft topics can be edited and approved directly, or moved through `REVIEW` before approval. The Activity Generation screen lists only `APPROVED` or `SELECTED` topics; after approving a topic, refresh the list if that screen is already open.
@@ -106,9 +107,9 @@ Activity endpoints:
 - `GET /api/activities` and `GET /api/activities/{activity_id}`
 
 ## Explicit Architectural Constraints
-- **NO DATABASES**: Do not use PostgreSQL, MySQL, MongoDB, Prisma, Supabase, etc.
+- **LOCAL DATABASE**: Use SQLite for application persistence. Avoid PostgreSQL, MySQL, MongoDB, Prisma, and Supabase.
 - **NO CLOUD STORAGE**: Do not use AWS S3, Google Cloud Storage, Azure Blob Storage.
-- **LOCAL-FIRST**: Everything must be persisted in Excel or the local filesystem.
+- **LOCAL-FIRST**: Everything must be persisted in SQLite or the local filesystem.
 - **NO EXTERNAL AUTH**: Do not use OAuth, JWT, or database-backed authentication. Use hardcoded configurations for now.
 # Octa-Activity-Generator
 # Octa-Activity-Generator

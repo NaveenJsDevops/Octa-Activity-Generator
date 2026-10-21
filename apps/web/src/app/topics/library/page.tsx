@@ -4,7 +4,8 @@
 import { API_BASE_URL } from "@/lib/apiBase";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Search, XCircle, AlertCircle, FileText, ArrowRight, ChevronDown, RefreshCw } from "lucide-react";
+import { Search, XCircle, AlertCircle, FileText, ArrowRight, ChevronDown, RefreshCw, CalendarClock } from "lucide-react";
+import { formatDateTime } from "@/lib/dateTime";
 
 // Deterministic color mapping for topic families/types
 const TOPIC_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -147,7 +148,7 @@ export default function TopicsPage() {
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Discovered Topics</h1>
           <p className="text-slate-500 mt-1.5 text-[15px]">
-            Review all topics stored in Excel and open any topic to inspect or edit details.
+            Review all topics stored in the database and open any topic to inspect or edit details.
           </p>
         </div>
 
@@ -156,7 +157,7 @@ export default function TopicsPage() {
             onClick={fetchTopics}
             disabled={loading}
             className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
-            title="Reload topics from Excel"
+            title="Reload topics from the database"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -265,7 +266,7 @@ export default function TopicsPage() {
           <p className="text-slate-400 max-w-sm text-sm mb-5">
             {hasActiveFilters
               ? "None of the topics match your current filter and search criteria."
-              : "No topics are stored in Excel yet. Discover and save candidates to get started."}
+              : "No topics are stored in the database yet. Discover and save candidates to get started."}
           </p>
           {hasActiveFilters ? (
             <button
@@ -327,6 +328,15 @@ export default function TopicsPage() {
                     {t.topic.short_description || t.topic.full_description || t.topic.topic_hook || "No description provided."}
                   </p>
 
+                  {formatDateTime(t.topic.created_at) && (
+                    <p className="flex items-center gap-1.5 pt-1 text-xs text-slate-500">
+                      <CalendarClock className="h-3.5 w-3.5" />
+                      <time dateTime={t.topic.created_at}>
+                        Created {formatDateTime(t.topic.created_at)}
+                      </time>
+                    </p>
+                  )}
+
                   {/* Keywords chips */}
                   {keywords.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
@@ -350,7 +360,10 @@ export default function TopicsPage() {
                 {/* View button */}
                 <div className="shrink-0 flex items-center">
                   <Link
-                    href={`/topics/${t.topic.topic_id}`}
+                    href={{
+                      pathname: "/topics/detail",
+                      query: { id: t.topic.topic_id },
+                    }}
                     className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group-hover:border-[#5B50F5] group-hover:text-[#5B50F5]"
                   >
                     View <ArrowRight className="w-3.5 h-3.5" />

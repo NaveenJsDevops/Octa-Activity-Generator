@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowLeft, ArrowUp, Search } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, Search, CalendarClock } from "lucide-react";
 import { ActivityLibraryItem, getActivities } from "@/lib/api/activityIdeation";
 import { ActivityTemplateView } from "@/components/activity-ideation/ActivityTemplateView";
+import { formatDateTime } from "@/lib/dateTime";
 
 export default function ActivityLibraryPage() {
   const [activities, setActivities] = useState<ActivityLibraryItem[]>([]);
@@ -48,7 +49,7 @@ export default function ActivityLibraryPage() {
             <ArrowLeft className="h-4 w-4" /> Activity Generation
           </Link>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Activity Library</h1>
-          <p className="mt-2 text-slate-600">Approved activities saved in the local Excel workbook.</p>
+          <p className="mt-2 text-slate-600">Approved activities saved in the local database.</p>
         </div>
         <Link href="/activities" className="rounded-xl bg-[#5B50F5] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4740d4]">
           Generate activities
@@ -113,6 +114,15 @@ export default function ActivityLibraryPage() {
                         <span>{topic_title}</span><span aria-hidden="true">·</span>
                         <span>Ages {activity.age_min}–{activity.age_max}{activity.target_class ? ` · ${activity.target_class}` : ""}</span><span aria-hidden="true">·</span>
                         <span>{activity.activity_duration || `${activity.estimated_duration} minutes`}</span>
+                        {formatDateTime(activity.created_at) && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center gap-1">
+                              <CalendarClock className="h-3.5 w-3.5" />
+                              <time dateTime={activity.created_at}>Created {formatDateTime(activity.created_at)}</time>
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">

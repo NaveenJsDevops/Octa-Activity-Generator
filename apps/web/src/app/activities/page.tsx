@@ -164,7 +164,10 @@ function ActivityGenerationContent() {
                 Generate Activities <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                href={`/topics/${encodeURIComponent(selectedTopic.topic.topic_id)}`}
+                href={{
+                  pathname: "/topics/detail",
+                  query: { id: selectedTopic.topic.topic_id },
+                }}
                 className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 <Edit3 className="h-4 w-4" /> Edit topic details
