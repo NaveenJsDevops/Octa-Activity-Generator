@@ -66,7 +66,7 @@ The frontend is published to GitHub Pages by `.github/workflows/deploy-pages.yml
 Deployment steps:
 1. Create a Render Blueprint from this repository and deploy the `octa-activity-api` service.
 2. In Render, set `FRONTEND_URL` to `https://naveenjsdevops.github.io` (the origin only, without the repository path), `GEMINI_API_KEY` to the provider key, and `ALLOWED_USERS` to the configured comma-separated `username:password` entries.
-3. In the GitHub repository's Actions variables, set `NEXT_PUBLIC_API_URL` to the Render service's public base URL, such as `https://octa-activity-api.onrender.com`. The Pages workflow embeds it in the frontend at build time.
+3. The Pages workflow uses `https://octa-activity-api.onrender.com` as the default API URL. If the Render service URL changes, override it by setting the `NEXT_PUBLIC_API_URL` Actions variable in the GitHub repository. The workflow embeds this URL in the frontend at build time.
 
 The frontend sends requests directly to the Render API, so Render CORS must allow the exact GitHub Pages origin. The free demo uses one backend instance and temporary SQLite/file storage; do not use it for data that must persist. Upgrade to a paid service with a persistent disk before using it for data you need to keep.
 

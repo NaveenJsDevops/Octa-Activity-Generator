@@ -22,7 +22,7 @@ jobs:
         working-directory: apps/web
     env:
       NEXT_PUBLIC_BASE_PATH: /Octa-Activity-Generator
-      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://octa-activity-api.onrender.com' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
