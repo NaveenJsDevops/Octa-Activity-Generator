@@ -11,6 +11,8 @@ interface TopicFamily {
   name: string;
 }
 
+const CLASS_OPTIONS = ["Grade 6", "Grade 7", "Grade 8", "Grade 9"];
+
 interface TopicDiscoveryPanelProps {
   onTopicsGenerated: () => void;
   aiConfigured: boolean | null;
@@ -288,15 +290,20 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
 
           {/* Class */}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Class</label>
-            <input
-              type="text"
+            <label htmlFor="target-class" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Class</label>
+            <select
+              id="target-class"
               value={targetClass}
               onChange={e => setTargetClass(e.target.value)}
               disabled={generating}
-              placeholder="Grade 6"
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5]"
-            />
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              {CLASS_OPTIONS.map(classOption => (
+                <option key={classOption} value={classOption}>
+                  {classOption}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

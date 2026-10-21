@@ -54,7 +54,7 @@ function ActivityGenerationContent() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Activity Generation</h1>
-          <p className="mt-2 text-slate-600">Choose an approved topic to create and review educational activities.</p>
+          <p className="mt-2 text-slate-600">Turn an approved topic into classroom-ready activities in three steps.</p>
         </div>
         <button
           onClick={() => {
@@ -71,8 +71,33 @@ function ActivityGenerationContent() {
 
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
 
+      <ol className="grid gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4 sm:grid-cols-3 sm:p-5">
+        <li className="flex gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#5B50F5] text-sm font-bold text-white">1</span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Choose a topic</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Pick an approved topic from the list below.</p>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-[#5B50F5]">2</span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Generate activity ideas</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Review the topic details, then select “Generate Activities.”</p>
+          </div>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-[#5B50F5]">3</span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Review and save</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Edit the generated ideas and approve the ones to save.</p>
+          </div>
+        </li>
+      </ol>
+
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-sm font-bold text-slate-900">Step 1: Choose an approved topic</h2>
           <label className="relative mb-4 block">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -133,7 +158,7 @@ function ActivityGenerationContent() {
             <>
               <div className="mb-4 flex items-center gap-2 text-[#5B50F5]">
                 <Sparkles className="h-4 w-4" />
-                <span className="text-xs font-bold uppercase tracking-wider">Selected topic</span>
+                <span className="text-xs font-bold uppercase tracking-wider">Step 2: Review your topic</span>
               </div>
               <h2 className="text-xl font-bold text-slate-900">{selectedTopic.topic.topic}</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -163,6 +188,9 @@ function ActivityGenerationContent() {
               >
                 Generate Activities <ArrowRight className="h-4 w-4" />
               </Link>
+              <p className="mt-2 text-center text-xs leading-5 text-slate-500">
+                Next, you’ll generate activity ideas, review them, and approve the ones you want to save.
+              </p>
               <Link
                 href={{
                   pathname: "/topics/detail",
@@ -176,7 +204,8 @@ function ActivityGenerationContent() {
           ) : (
             <div className="py-10 text-center">
               <Sparkles className="mx-auto h-8 w-8 text-slate-300" />
-              <p className="mt-3 text-sm text-slate-500">Select a topic to view its details and generate activities.</p>
+              <p className="mt-3 text-sm font-semibold text-slate-700">Your next step: choose a topic</p>
+              <p className="mt-1 text-sm text-slate-500">Select an approved topic from the list to review it and start generating activities.</p>
             </div>
           )}
         </aside>
