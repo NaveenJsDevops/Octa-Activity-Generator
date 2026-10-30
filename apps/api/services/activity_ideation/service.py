@@ -33,9 +33,18 @@ class ActivityIdeationService:
     def __init__(self, excel_repo: ExcelRepository, ai_orchestrator: AIOrchestrator):
         self.excel_repo = excel_repo
         self.ai = ai_orchestrator
+        self.activity_types = self.excel_repo.read_sheet("ActivityTypes")
+        if not self.activity_types:
+            from apps.api.services.master_data import ensure_default_activity_types
+            ensure_default_activity_types(self.excel_repo)
+            self.activity_types = self.excel_repo.read_sheet("ActivityTypes")
         self.skills = self.excel_repo.read_sheet("Skills")
         self.sub_skills = self.excel_repo.read_sheet("SubSkills")
-        self.activity_types = self.excel_repo.read_sheet("ActivityTypes")
+        if not self.skills or not self.sub_skills:
+            from apps.api.services.master_data import ensure_default_skills_and_intelligences
+            ensure_default_skills_and_intelligences(self.excel_repo)
+            self.skills = self.excel_repo.read_sheet("Skills")
+            self.sub_skills = self.excel_repo.read_sheet("SubSkills")
         self.validator = MasterDataValidator(
             skills=self.skills,
             sub_skills=self.sub_skills,

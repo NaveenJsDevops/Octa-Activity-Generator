@@ -11,8 +11,14 @@ echo "============================================================"
 cleanup() {
     echo ""
     echo "🛑 Stopping services..."
-    kill $BACKEND_PID 2>/dev/null || true
-    kill $FRONTEND_PID 2>/dev/null || true
+    if [ -n "$BACKEND_PID" ]; then
+        kill -TERM $BACKEND_PID 2>/dev/null || true
+        pkill -P $BACKEND_PID 2>/dev/null || true
+    fi
+    if [ -n "$FRONTEND_PID" ]; then
+        kill -TERM $FRONTEND_PID 2>/dev/null || true
+        pkill -P $FRONTEND_PID 2>/dev/null || true
+    fi
     echo "✅ All services stopped."
     exit 0
 }
@@ -20,10 +26,48 @@ cleanup() {
 # Register the cleanup function to be called on the EXIT signal
 trap cleanup SIGINT SIGTERM EXIT
 
+# Find Python 3.10+
+find_python() {
+    for cmd in python3.12 python3.11 python3.10 python3; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            version=$("$cmd" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)
+            if [ -n "$version" ]; then
+                major=$(echo "$version" | cut -d. -f1)
+                minor=$(echo "$version" | cut -d. -f2)
+                if [ "$major" -eq 3 ] && [ "$minor" -ge 10 ]; then
+                    command -v "$cmd"
+                    return 0
+                fi
+            fi
+        fi
+    done
+    return 1
+}
+
+# Ensure Backend venv exists and has a valid Python interpreter
+if [ ! -d "apps/api/venv" ] || [ ! -x "apps/api/venv/bin/python" ] || ! apps/api/venv/bin/python --version >/dev/null 2>&1 || [ ! -x "apps/api/venv/bin/uvicorn" ]; then
+    echo "⚠️  Backend virtual environment is missing or invalid. Initializing..."
+    PYTHON_EXEC=$(find_python)
+    if [ -z "$PYTHON_EXEC" ]; then
+        echo "❌ Error: Python 3.10 or newer is required but was not found."
+        exit 1
+    fi
+    echo "Using Python: $PYTHON_EXEC ($($PYTHON_EXEC --version))"
+    "$PYTHON_EXEC" -m venv --clear apps/api/venv
+    apps/api/venv/bin/pip install --upgrade pip --quiet
+    apps/api/venv/bin/pip install -r apps/api/requirements.txt
+fi
+
+# Ensure frontend dependencies are installed
+if [ ! -d "apps/web/node_modules" ]; then
+    echo "📦 Installing frontend dependencies..."
+    cd apps/web && npm install && cd ../..
+fi
+
 # 1. Start the Backend
 echo "📦 Starting Backend API (FastAPI)..."
 source apps/api/venv/bin/activate
-PYTHONPATH=. uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload &
+PYTHONPATH=. apps/api/venv/bin/uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 # 2. Start the Frontend
@@ -54,8 +98,7 @@ echo "    ✅ System Health Report"
 echo "============================================================"
 
 # Use python to parse and display the JSON beautifully
-source apps/api/venv/bin/activate
-python3 -c "
+apps/api/venv/bin/python -c "
 import urllib.request
 import json
 import sys

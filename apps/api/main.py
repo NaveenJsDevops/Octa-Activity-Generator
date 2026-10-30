@@ -14,14 +14,14 @@ from apps.api.routers.activities import router as activities_router
 from apps.api.routers.master import router as master_router
 from apps.api.routers.settings import router as settings_router
 from apps.api.repositories.excel import ExcelRepository
-from apps.api.services.master_data import ensure_default_topic_families
+from apps.api.services.master_data import ensure_default_master_data
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize excel workbooks safely on startup
     repo = ExcelRepository(settings.DATA_DIR)
     repo.initialize_workbooks()
-    ensure_default_topic_families(repo)
+    ensure_default_master_data(repo)
     yield
 
 app = FastAPI(
@@ -58,6 +58,18 @@ app.include_router(settings_router)
 @app.get("/")
 def read_root() -> Dict[str, str]:
     return {"status": "ok", "message": "Octa AI Activity Platform API is running"}
+
+import logging
+
+class QuietLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/clients" not in record.getMessage()
+
+logging.getLogger("uvicorn.access").addFilter(QuietLogFilter())
+
+@app.get("/clients", include_in_schema=False)
+def clients_probe():
+    return []
 
 @app.get("/api/health")
 def health_check() -> Dict[str, Any]:
