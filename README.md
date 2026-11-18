@@ -62,7 +62,7 @@ Run everything with a single command:
    ```
 
 ## Deployment: GitHub Pages Frontend + Render API
-The frontend is published to GitHub Pages by `.github/workflows/deploy-pages.yml`, and the FastAPI backend runs on Render for demos. The root `render.yaml` defines the API service:
+The frontend is published to GitHub Pages by `.github/workflows/nextjs.yml`, and the FastAPI backend runs on Render for demos. The root `render.yaml` defines the API service:
 - Render builds from the repository root using `apps/api/requirements.txt` and runs `apps.api.main:app`.
 - Data is persisted directly to Google Cloud Firestore using the configured service credentials.
 

@@ -77,11 +77,12 @@ def clients_probe():
 @app.get("/api/health")
 def health_check() -> Dict[str, Any]:
     # Check Database (Cloud Firestore) Configuration
+    is_connected = bool(firestore_manager.is_available)
     db_status = {
         "provider": "firestore",
-        "configured": firestore_manager.is_available,
-        "project": firestore_manager.project_id,
-        "status": "connected" if firestore_manager.is_available else "dormant"
+        "configured": is_connected,
+        "project": firestore_manager.project_id if is_connected else None,
+        "status": "connected" if is_connected else "in_memory"
     }
     
     # Check AI Configuration
@@ -110,6 +111,7 @@ def health_check() -> Dict[str, Any]:
         "status": "ok", 
         "environment": settings.ENVIRONMENT,
         "database": db_status,
+        "firestore": db_status,
         "ai": ai_status
     }
 
