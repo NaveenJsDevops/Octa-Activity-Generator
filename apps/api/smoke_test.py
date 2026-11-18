@@ -13,12 +13,12 @@ os.environ["AI_MAX_RETRIES"] = "1"
 os.environ["AI_API_KEY"] = "dummy_key_for_test"
 
 from apps.api.main import app
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.models.topic_discovery import TopicDiscoveryOutput, TopicCandidate
 
 client = TestClient(app)
-repo = ExcelRepository(temp_data_dir)
-repo.initialize_workbooks()
+repo = FirestoreRepository(temp_data_dir)
+repo.initialize_database()
 
 # Seed Master Data
 repo.append_record("TopicFamilies", {"topic_family_id": "TF-SMOKE-1", "name": "Smoke Test Family"})
@@ -88,7 +88,7 @@ with patch('apps.api.services.ai.orchestrator.AIOrchestrator.generate_structured
     else:
         print(f"Error: {response.json()}")
         
-print("\\n[RUNNING] Verify Excel Persistence...")
+print("\\n[RUNNING] Verify Repository Persistence...")
 topics = repo.read_sheet("Topics")
 topic_skills = repo.read_sheet("TopicSkills")
 topic_keywords = repo.read_sheet("TopicKeywords")

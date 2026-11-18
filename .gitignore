@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 !.env.*.example
+*firebase-key*.json
+*-key.json
+serviceAccountKey*.json
 
 # Node.js / Next.js
 node_modules/

@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-Build a local-first AI-powered activity generation platform for Octa Kids.
+Build a professional AI-powered activity generation platform for Octa Kids.
 
 ## Architecture
 
@@ -16,10 +16,10 @@ Backend:
 - FastAPI
 
 Persistence:
-- SQLite database as the primary source of truth
+- Google Cloud Firestore database as the primary source of truth
 
 File storage:
-- Local filesystem only
+- Local filesystem for static assets
 
 Authentication:
 - Configurable hardcoded users
@@ -41,14 +41,11 @@ DO NOT introduce:
 - Prisma
 - Supabase
 - S3
-- Cloud storage
 - OAuth
 - JWT
 - External authentication services
 
-SQLite is the source of truth for application data.
-
-Local filesystem is the source of truth for generated files.
+Google Cloud Firestore is the primary source of truth for application data.
 
 ## AI Rules
 
@@ -62,7 +59,7 @@ All AI responses must:
 4. Be logged.
 5. Be versioned.
 
-AI must not directly write files.
+AI must not directly write files or database records.
 
 AI must return structured data to the backend.
 
@@ -75,14 +72,13 @@ Use clear separation between:
 - API
 - Business logic
 - AI
-- Excel repository
-- Local storage
+- Repository layer (Firestore)
 - Validation
 - Workflow
 
 Do not put business logic inside API routes.
 
-Do not put Excel manipulation inside AI services.
+Do not put database manipulation inside AI services.
 
 Do not put AI prompts inside frontend code.
 

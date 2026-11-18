@@ -20,7 +20,7 @@ from apps.api.models.domain import (
     RelationshipType,
     TopicStatus,
 )
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from .duplicate_checker import DuplicateChecker
 from .review_session_store import ActivityReviewSession, ActivityReviewSessionStore
@@ -30,21 +30,21 @@ ELIGIBLE_TOPIC_STATUSES = {TopicStatus.APPROVED.value, TopicStatus.SELECTED.valu
 
 
 class ActivityIdeationService:
-    def __init__(self, excel_repo: ExcelRepository, ai_orchestrator: AIOrchestrator):
-        self.excel_repo = excel_repo
+    def __init__(self, repo: FirestoreRepository, ai_orchestrator: AIOrchestrator):
+        self.repo = repo
         self.ai = ai_orchestrator
-        self.activity_types = self.excel_repo.read_sheet("ActivityTypes")
+        self.activity_types = self.repo.read_sheet("ActivityTypes")
         if not self.activity_types:
             from apps.api.services.master_data import ensure_default_activity_types
-            ensure_default_activity_types(self.excel_repo)
-            self.activity_types = self.excel_repo.read_sheet("ActivityTypes")
-        self.skills = self.excel_repo.read_sheet("Skills")
-        self.sub_skills = self.excel_repo.read_sheet("SubSkills")
+            ensure_default_activity_types(self.repo)
+            self.activity_types = self.repo.read_sheet("ActivityTypes")
+        self.skills = self.repo.read_sheet("Skills")
+        self.sub_skills = self.repo.read_sheet("SubSkills")
         if not self.skills or not self.sub_skills:
             from apps.api.services.master_data import ensure_default_skills_and_intelligences
-            ensure_default_skills_and_intelligences(self.excel_repo)
-            self.skills = self.excel_repo.read_sheet("Skills")
-            self.sub_skills = self.excel_repo.read_sheet("SubSkills")
+            ensure_default_skills_and_intelligences(self.repo)
+            self.skills = self.repo.read_sheet("Skills")
+            self.sub_skills = self.repo.read_sheet("SubSkills")
         self.validator = MasterDataValidator(
             skills=self.skills,
             sub_skills=self.sub_skills,
@@ -53,22 +53,22 @@ class ActivityIdeationService:
 
     def _get_topic(self, topic_id: str) -> Optional[Dict[str, Any]]:
         return next(
-            (topic for topic in self.excel_repo.read_sheet("Topics") if topic["topic_id"] == topic_id),
+            (topic for topic in self.repo.read_sheet("Topics") if topic["topic_id"] == topic_id),
             None,
         )
 
     def _get_topic_context(self, topic_id: str) -> Dict[str, Any]:
         from apps.api.services.topic_review.service import TopicReviewService
 
-        return TopicReviewService(self.excel_repo).get_topic_detail(topic_id)
+        return TopicReviewService(self.repo).get_topic_detail(topic_id)
 
     def get_eligible_topics(self, search: Optional[str] = None) -> List[dict]:
         from apps.api.services.topic_review.service import TopicReviewService
 
-        topic_service = TopicReviewService(self.excel_repo)
+        topic_service = TopicReviewService(self.repo)
         query = (search or "").strip().lower()
         eligible = []
-        for topic in self.excel_repo.read_sheet("Topics"):
+        for topic in self.repo.read_sheet("Topics"):
             if topic["status"] not in ELIGIBLE_TOPIC_STATUSES:
                 continue
             if query and query not in " ".join(
@@ -89,12 +89,12 @@ class ActivityIdeationService:
     def _duplicate_checker(self, exclude_activity_id: Optional[str] = None) -> DuplicateChecker:
         concepts = [
             ActivityConcept(**record)
-            for record in self.excel_repo.read_sheet("ActivityConcepts")
+            for record in self.repo.read_sheet("ActivityConcepts")
             if record.get("concept_id") != exclude_activity_id
         ]
         activities = [
             record
-            for record in self.excel_repo.read_sheet("Activities")
+            for record in self.repo.read_sheet("Activities")
             if record.get("concept_id") != exclude_activity_id
         ]
         return DuplicateChecker(concepts, activities)
@@ -318,6 +318,12 @@ educational metadata. Do not put these metadata in place of any template content
                 "rejected_candidates": rejected,
             },
         )
+        try:
+            from apps.api.core.firestore import firestore_manager
+            for c in concepts:
+                firestore_manager.save_record("ActivityConcepts", c)
+        except Exception:
+            pass
         return self._format_session(session)
 
     def get_review_session(self, session_id: str) -> ActivityIdeationResult:
@@ -407,7 +413,7 @@ educational metadata. Do not put these metadata in place of any template content
         if concept["status"] == ActivityStatus.APPROVED.value:
             if any(
                 record["concept_id"] == concept_id
-                for record in self.excel_repo.read_sheet("Activities")
+                for record in self.repo.read_sheet("Activities")
             ):
                 return self._format_concept(concept)
         if concept["status"] != "TEMPORARY":
@@ -419,7 +425,7 @@ educational metadata. Do not put these metadata in place of any template content
         existing = next(
             (
                 record
-                for record in self.excel_repo.read_sheet("Activities")
+                for record in self.repo.read_sheet("Activities")
                 if record["concept_id"] == concept_id
             ),
             None,
@@ -505,11 +511,11 @@ educational metadata. Do not put these metadata in place of any template content
                     )
                 )
             try:
-                self.excel_repo.append_records_atomic(entries)
+                self.repo.append_records_atomic(entries)
             except ValueError:
                 if not any(
                     record["concept_id"] == concept_id
-                    for record in self.excel_repo.read_sheet("Activities")
+                    for record in self.repo.read_sheet("Activities")
                 ):
                     raise
 
@@ -523,17 +529,22 @@ educational metadata. Do not put these metadata in place of any template content
     ) -> ActivityConceptResponse:
         _, concept = self._get_temporary_concept(session_id, concept_id)
         concept["status"] = ActivityStatus.REJECTED.value
+        try:
+            from apps.api.core.firestore import firestore_manager
+            firestore_manager.update_record("ActivityConcepts", concept_id, {"status": ActivityStatus.REJECTED.value})
+        except Exception:
+            pass
         return self._format_concept(concept)
 
     def get_concepts(self, topic_id: str, status: Optional[str] = None) -> List[ActivityConceptResponse]:
-        concepts = self.excel_repo.read_sheet("ActivityConcepts")
+        concepts = self.repo.read_sheet("ActivityConcepts")
         filtered = [concept for concept in concepts if concept["topic_id"] == topic_id]
         if status:
             filtered = [concept for concept in filtered if concept["status"] == status.upper()]
         return [ActivityConceptResponse(**concept) for concept in filtered]
 
     def select_concept(self, concept_id: str) -> ActivityConceptResponse:
-        concepts = self.excel_repo.read_sheet("ActivityConcepts")
+        concepts = self.repo.read_sheet("ActivityConcepts")
         concept = next((item for item in concepts if item["concept_id"] == concept_id), None)
         if not concept:
             raise HTTPException(status_code=404, detail="Concept not found")
@@ -548,7 +559,7 @@ educational metadata. Do not put these metadata in place of any template content
         if concept["status"] != ActivityStatus.DRAFT.value:
             raise HTTPException(status_code=400, detail=f"Cannot select concept in {concept['status']} state.")
 
-        updated = self.excel_repo.update_record(
+        updated = self.repo.update_record(
             "ActivityConcepts",
             concept_id,
             {"status": ActivityStatus.SELECTED.value},
@@ -557,12 +568,12 @@ educational metadata. Do not put these metadata in place of any template content
 
     def list_activities(self, search: Optional[str] = None, topic_id: Optional[str] = None) -> List[dict]:
         query = (search or "").strip().lower()
-        topics = {topic["topic_id"]: topic for topic in self.excel_repo.read_sheet("Topics")}
+        topics = {topic["topic_id"]: topic for topic in self.repo.read_sheet("Topics")}
         skills = {skill["skill_id"]: skill for skill in self.skills}
         sub_skills = {sub["sub_skill_id"]: sub for sub in self.sub_skills}
-        activity_skills = self.excel_repo.read_sheet("ActivitySkills")
+        activity_skills = self.repo.read_sheet("ActivitySkills")
         results = []
-        for activity in self.excel_repo.read_sheet("Activities"):
+        for activity in self.repo.read_sheet("Activities"):
             if activity["status"] != ActivityStatus.APPROVED.value:
                 continue
             if topic_id and activity["topic_id"] != topic_id:
@@ -594,7 +605,7 @@ educational metadata. Do not put these metadata in place of any template content
         activity = next(
             (
                 record
-                for record in self.excel_repo.read_sheet("Activities")
+                for record in self.repo.read_sheet("Activities")
                 if record["activity_id"] == activity_id
                 and record["status"] == ActivityStatus.APPROVED.value
             ),

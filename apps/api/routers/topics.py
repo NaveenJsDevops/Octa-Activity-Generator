@@ -5,7 +5,7 @@ from apps.api.models.topic_discovery import (
     TopicCandidate, RejectedCandidate
 )
 from apps.api.services.topic_discovery.service import TopicDiscoveryService
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.services.ai.prompts.registry import PromptRegistry, PromptTemplate
 from apps.api.services.ai.exceptions import AIConfigurationError
@@ -15,8 +15,8 @@ from datetime import datetime
 router = APIRouter(prefix="/api/topics", tags=["topics"])
 
 # Dependency injection helpers
-def get_excel_repository() -> ExcelRepository:
-    return ExcelRepository(settings.DATA_DIR)
+def get_repository() -> FirestoreRepository:
+    return FirestoreRepository(settings.DATA_DIR)
 
 def get_prompt_registry() -> PromptRegistry:
     registry = PromptRegistry()
@@ -38,15 +38,15 @@ def get_prompt_registry() -> PromptRegistry:
     ))
     return registry
 
-def get_ai_orchestrator(excel_repo: ExcelRepository = Depends(get_excel_repository)) -> AIOrchestrator:
-    return AIOrchestrator(excel_repo)
+def get_ai_orchestrator(repo: FirestoreRepository = Depends(get_repository)) -> AIOrchestrator:
+    return AIOrchestrator(repo)
 
 def get_topic_discovery_service(
-    excel_repo: ExcelRepository = Depends(get_excel_repository),
+    repo: FirestoreRepository = Depends(get_repository),
     orchestrator: AIOrchestrator = Depends(get_ai_orchestrator),
     prompt_registry: PromptRegistry = Depends(get_prompt_registry)
 ) -> TopicDiscoveryService:
-    return TopicDiscoveryService(excel_repo, orchestrator, prompt_registry)
+    return TopicDiscoveryService(repo, orchestrator, prompt_registry)
 
 @router.post("/discover")
 def discover_topics(

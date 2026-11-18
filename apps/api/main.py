@@ -13,15 +13,18 @@ from apps.api.routers.activity_ideation import router as activity_ideation_route
 from apps.api.routers.activities import router as activities_router
 from apps.api.routers.master import router as master_router
 from apps.api.routers.settings import router as settings_router
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.master_data import ensure_default_master_data
+from apps.api.core.firestore import firestore_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize excel workbooks safely on startup
-    repo = ExcelRepository(settings.DATA_DIR)
-    repo.initialize_workbooks()
+    # Initialize repository and master data safely on startup
+    repo = FirestoreRepository(settings.DATA_DIR)
+    repo.initialize_database()
     ensure_default_master_data(repo)
+    if firestore_manager.is_available:
+        firestore_manager.sync_all_to_firestore(repo, synchronous=False)
     yield
 
 app = FastAPI(
@@ -73,10 +76,13 @@ def clients_probe():
 
 @app.get("/api/health")
 def health_check() -> Dict[str, Any]:
-    # Check Excel Configuration
-    repo = ExcelRepository(settings.DATA_DIR)
-    excel_configured = os.path.exists(repo.data_dir)
-    excel_initialized = os.path.exists(os.path.join(repo.data_dir, "topics", "Octa_Topics.xlsx"))
+    # Check Database (Cloud Firestore) Configuration
+    db_status = {
+        "provider": "firestore",
+        "configured": firestore_manager.is_available,
+        "project": firestore_manager.project_id,
+        "status": "connected" if firestore_manager.is_available else "dormant"
+    }
     
     # Check AI Configuration
     provider = settings.AI_PROVIDER.lower()
@@ -103,10 +109,7 @@ def health_check() -> Dict[str, Any]:
     return {
         "status": "ok", 
         "environment": settings.ENVIRONMENT,
-        "excel": {
-            "configured": excel_configured,
-            "initialized": excel_initialized
-        },
+        "database": db_status,
         "ai": ai_status
     }
 

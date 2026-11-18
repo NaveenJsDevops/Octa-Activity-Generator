@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from apps.api.main import app
-from apps.api.routers.activity_ideation import get_excel_repository, get_ai_orchestrator, get_ideation_service
+from apps.api.routers.activity_ideation import get_repository, get_ai_orchestrator, get_ideation_service
 from apps.api.routers.activities import get_activity_service
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.activity_ideation.service import ActivityIdeationService
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.services.ai.exceptions import AIRetryExhaustedError
@@ -52,12 +52,12 @@ def ai_template(name, description=None):
     }
 
 
-# --- MOCK EXCEL REPO SETUP ---
+# --- REPOSITORY SETUP ---
 @pytest.fixture
 def test_data_dir():
     with tempfile.TemporaryDirectory() as temp_dir:
-        repo = ExcelRepository(temp_dir)
-        repo.initialize_workbooks()
+        repo = FirestoreRepository(temp_dir)
+        repo.initialize_database()
         
         # Insert minimal master data
         repo.append_record("TopicFamilies", {"topic_family_id": "TF1", "name": "Science"})
@@ -132,7 +132,7 @@ def mock_ai():
 
 @pytest.fixture
 def client(test_data_dir, mock_ai):
-    app.dependency_overrides[get_excel_repository] = lambda: test_data_dir
+    app.dependency_overrides[get_repository] = lambda: test_data_dir
     app.dependency_overrides[get_ai_orchestrator] = lambda: mock_ai
     app.dependency_overrides[get_activity_service] = lambda: ActivityIdeationService(test_data_dir, mock_ai)
     with TestClient(app) as c:

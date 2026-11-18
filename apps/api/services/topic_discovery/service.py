@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.services.ai.prompts.registry import PromptRegistry, PromptTemplate
 from apps.api.models.domain import Topic, TopicSkill, TopicKeyword, Intelligence, Skill, SubSkill
@@ -23,11 +23,11 @@ from .session_store import SessionStore
 class TopicDiscoveryService:
     def __init__(
         self, 
-        excel_repo: ExcelRepository, 
+        repo: FirestoreRepository, 
         orchestrator: AIOrchestrator,
         prompt_registry: PromptRegistry
     ):
-        self.excel_repo = excel_repo
+        self.repo = repo
         self.orchestrator = orchestrator
         self.prompt_registry = prompt_registry
         
@@ -36,7 +36,7 @@ class TopicDiscoveryService:
         self.researcher = WebResearcher()
         
     def _generate_topic_id(self) -> str:
-        topics = self.excel_repo.read_sheet("Topics")
+        topics = self.repo.read_sheet("Topics")
         if not topics:
             return "TOP-000001"
         
@@ -89,7 +89,7 @@ class TopicDiscoveryService:
             prompt_version=prompt_tmpl.version
         )
         
-        gen_runs = self.excel_repo.read_sheet("GenerationRuns")
+        gen_runs = self.repo.read_sheet("GenerationRuns")
         generation_id = gen_runs[-1]["generation_id"] if gen_runs else "UNKNOWN"
         
         # Create session
@@ -113,7 +113,7 @@ class TopicDiscoveryService:
         candidate = session.candidates[index]
         request = session.request
         
-        existing_topics = [Topic(**t) for t in self.excel_repo.read_sheet("Topics")]
+        existing_topics = [Topic(**t) for t in self.repo.read_sheet("Topics")]
         duplicate_checker = DuplicateChecker(existing_topics)
         
         is_valid, reason = self.validator.validate(candidate, request)
@@ -146,7 +146,7 @@ class TopicDiscoveryService:
             generation_id=session.generation_id
         )
         
-        self.excel_repo.append_record("Topics", topic.model_dump(mode='json'))
+        self.repo.append_record("Topics", topic.model_dump(mode='json'))
 
         for kw in candidate.keywords:
             tkw = TopicKeyword(
@@ -154,7 +154,22 @@ class TopicDiscoveryService:
                 keyword=kw,
                 source="AI_GENERATED"
             )
-            self.excel_repo.append_record("TopicKeywords", tkw.model_dump(mode='json'))
+            self.repo.append_record("TopicKeywords", tkw.model_dump(mode='json'))
+
+        if getattr(request, 'skill_id', None):
+            sub_id = getattr(request, 'sub_skill_id', None)
+            if not sub_id:
+                sub_skills = self.repo.read_sheet("SubSkills")
+                matching = next((ss["sub_skill_id"] for ss in sub_skills if ss.get("skill_id") == request.skill_id), None)
+                sub_id = matching
+            if sub_id:
+                tskill = TopicSkill(
+                    topic_id=new_topic_id,
+                    skill_id=request.skill_id,
+                    sub_skill_id=sub_id,
+                    relationship_type=RelationshipType.PRIMARY
+                )
+                self.repo.append_record("TopicSkills", tskill.model_dump(mode='json'))
             
         return {"status": "success", "topic": topic.model_dump()}
 

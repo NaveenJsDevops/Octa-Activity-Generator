@@ -9,6 +9,9 @@ export interface TopicDiscoveryRequest {
   target_class?: string;
   country_context?: string;
   topic_family_id?: string;
+  intelligence_id?: string;
+  skill_id?: string;
+  sub_skill_id?: string;
   requested_count: number;
 }
 

@@ -6,10 +6,10 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from apps.api.core.config import settings
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 
 def seed():
-    repo = ExcelRepository(settings.DATA_DIR)
+    repo = FirestoreRepository(settings.DATA_DIR)
     
     # Check if we already have a topic
     topics = repo.read_sheet("Topics")

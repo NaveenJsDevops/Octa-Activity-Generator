@@ -9,23 +9,23 @@ from apps.api.services.ai.exceptions import (
     AIProviderError,
     AIRetryExhaustedError,
 )
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.core.config import settings
 
 router = APIRouter(prefix="/api/activity-ideation", tags=["Activity Ideation"])
 
-def get_excel_repository() -> ExcelRepository:
-    return ExcelRepository(settings.DATA_DIR)
+def get_repository() -> FirestoreRepository:
+    return FirestoreRepository(settings.DATA_DIR)
 
-def get_ai_orchestrator(excel_repo: ExcelRepository = Depends(get_excel_repository)) -> AIOrchestrator:
-    return AIOrchestrator(excel_repo)
+def get_ai_orchestrator(repo: FirestoreRepository = Depends(get_repository)) -> AIOrchestrator:
+    return AIOrchestrator(repo)
 
 def get_ideation_service(
-    excel_repo: ExcelRepository = Depends(get_excel_repository),
+    repo: FirestoreRepository = Depends(get_repository),
     ai_orchestrator: AIOrchestrator = Depends(get_ai_orchestrator)
 ) -> ActivityIdeationService:
-    return ActivityIdeationService(excel_repo, ai_orchestrator)
+    return ActivityIdeationService(repo, ai_orchestrator)
 
 @router.post("/generate", response_model=ActivityIdeationResult)
 def generate_concepts(

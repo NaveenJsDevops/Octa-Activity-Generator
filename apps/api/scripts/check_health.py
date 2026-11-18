@@ -9,11 +9,11 @@ try:
     print(f"API Status:      🟢 Running ({data.get('status')})")
     print(f"Environment:     {data.get('environment')}")
     
-    excel = data.get("excel", {})
-    if excel.get("configured") and excel.get("initialized"):
-        print(f"Excel Storage:   🟢 Configured and Initialized")
+    db = data.get("database", {})
+    if db.get("configured"):
+        print(f"Database:        🟢 Cloud Firestore ({db.get('status')}, Project: {db.get('project')})")
     else:
-        print(f"Excel Storage:   🔴 Not initialized")
+        print(f"Database:        🟡 In-Memory (Firestore not connected)")
         
     ai = data.get("ai", {})
     if ai.get("configured"):

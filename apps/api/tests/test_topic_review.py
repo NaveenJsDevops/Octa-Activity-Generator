@@ -10,15 +10,15 @@ temp_data_dir = tempfile.mkdtemp()
 os.environ["DATA_DIR"] = temp_data_dir
 
 from apps.api.main import app
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.routers.topic_review import get_topic_review_service
 from apps.api.services.topic_review.service import TopicReviewService
 
 @pytest.fixture(scope="module")
 def client():
     # Setup test data
-    repo = ExcelRepository(temp_data_dir)
-    repo.initialize_workbooks()
+    repo = FirestoreRepository(temp_data_dir)
+    repo.initialize_database()
     
     # Add dummy master data
     repo.append_record("Intelligences", {"intelligence_id": "INT-1", "name": "Visual-Spatial"})
@@ -100,7 +100,7 @@ def test_state_transitions(client):
 
 
 def test_draft_topic_can_be_approved_directly_and_used_for_activity_generation(client):
-    repo = ExcelRepository(temp_data_dir)
+    repo = FirestoreRepository(temp_data_dir)
     repo.append_record("Topics", {
         "topic_id": "TOP-DRAFT-APPROVAL",
         "topic": "Draft ready for activity ideas",
@@ -124,7 +124,7 @@ def test_draft_topic_can_be_approved_directly_and_used_for_activity_generation(c
 def test_reject_topic(client):
     # DRAFT -> REJECTED is not allowed, must be from DRAFT or REVIEW. Wait, DRAFT -> REJECTED IS allowed.
     # Let's add a new DRAFT topic
-    repo = ExcelRepository(temp_data_dir)
+    repo = FirestoreRepository(temp_data_dir)
     repo.append_record("Topics", {
         "topic_id": "TOP-3", "topic": "To Reject", "topic_family_id": "TF-1",
         "age_min": 5, "age_max": 7, "status": "DRAFT", "created_at": datetime.now(), 
@@ -149,7 +149,7 @@ def test_invalid_state_transition(client):
     assert res2.status_code == 409
     
 def test_history_logging(client):
-    repo = ExcelRepository(temp_data_dir)
+    repo = FirestoreRepository(temp_data_dir)
     history = repo.read_sheet("TopicReviewHistory")
     assert len(history) >= 4 # Edit, Review, Approve, Select, Unselect, Reject
     actions = [h["action"] for h in history]
@@ -162,7 +162,7 @@ def test_history_logging(client):
 
 def test_search_topics(client):
     # Setup test with a specific searchable topic
-    repo = ExcelRepository(temp_data_dir)
+    repo = FirestoreRepository(temp_data_dir)
     repo.append_record("Topics", {
         "topic_id": "TOP-SEARCH", "topic": "Animals in Cities", 
         "short_description": "How animals adapt to urban environments.", 

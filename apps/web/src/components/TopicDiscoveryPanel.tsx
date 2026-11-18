@@ -1,11 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Search, Sparkles, Loader2, AlertCircle, X, Check, Globe, CheckCircle, ArrowRight } from "lucide-react";
 import { discoverTopics, keepCandidate, rejectCandidate, keepAllCandidates, TopicDiscoveryRequest, TopicDiscoveryResult } from "@/lib/api/topicDiscovery";
+import {
+  fetchMasterData,
+  DEFAULT_INTELLIGENCES,
+  DEFAULT_SKILLS,
+  DEFAULT_SUBSKILLS,
+  MasterIntelligence,
+  MasterSkill,
+  MasterSubSkill,
+  MasterTopicFamily,
+} from "@/lib/apiCache";
 
-const TOPIC_FAMILIES = [
+const TOPIC_FAMILIES: MasterTopicFamily[] = [
   { topic_family_id: "tf-001", name: "Space Exploration" },
   { topic_family_id: "tf-animals-wildlife", name: "Animals & Wildlife" },
   { topic_family_id: "tf-nature-environment", name: "Nature & Environment" },
@@ -39,6 +49,16 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   const [requestedCount, setRequestedCount] = useState(1);
   const [topicFamilyId, setTopicFamilyId] = useState("");
 
+  // Master data and cascading selector states
+  const [topicFamilies, setTopicFamilies] = useState<MasterTopicFamily[]>(TOPIC_FAMILIES);
+  const [intelligences, setIntelligences] = useState<MasterIntelligence[]>(DEFAULT_INTELLIGENCES);
+  const [skills, setSkills] = useState<MasterSkill[]>(DEFAULT_SKILLS);
+  const [subSkills, setSubSkills] = useState<MasterSubSkill[]>(DEFAULT_SUBSKILLS);
+
+  const [selectedIntelligenceId, setSelectedIntelligenceId] = useState("");
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [selectedSubSkillId, setSelectedSubSkillId] = useState("");
+
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,6 +67,50 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   const [candidateErrors, setCandidateErrors] = useState<Record<number, string>>({});
 
   const [showResearch, setShowResearch] = useState(false);
+
+  useEffect(() => {
+    fetchMasterData()
+      .then(data => {
+        if (data.intelligences?.length) setIntelligences(data.intelligences);
+        if (data.skills?.length) setSkills(data.skills);
+        if (data.subSkills?.length) setSubSkills(data.subSkills);
+        if (data.topicFamilies?.length) setTopicFamilies(data.topicFamilies);
+      })
+      .catch(() => {
+        // Fallbacks already set
+      });
+  }, []);
+
+  // Filter skills based on selected intelligence
+  const filteredSkills = useMemo(() => {
+    if (!selectedIntelligenceId) return [];
+    return skills.filter(s => s.intelligence_id === selectedIntelligenceId);
+  }, [skills, selectedIntelligenceId]);
+
+  // Filter sub-skills based on selected skill
+  const filteredSubSkills = useMemo(() => {
+    if (!selectedSkillId) return [];
+    return subSkills.filter(ss => ss.skill_id === selectedSkillId);
+  }, [subSkills, selectedSkillId]);
+
+  const handleIntelligenceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedIntelligenceId(e.target.value);
+    setSelectedSkillId("");
+    setSelectedSubSkillId("");
+  };
+
+  const handleSkillChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSkillId(e.target.value);
+    setSelectedSubSkillId("");
+  };
+
+  const selectedSkillName = useMemo(() => {
+    return skills.find(s => s.skill_id === selectedSkillId)?.name;
+  }, [skills, selectedSkillId]);
+
+  const selectedSubSkillName = useMemo(() => {
+    return subSkills.find(ss => ss.sub_skill_id === selectedSubSkillId)?.name;
+  }, [subSkills, selectedSubSkillId]);
 
   const handleAddKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
@@ -92,6 +156,9 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
         target_class: targetClass || undefined,
         country_context: countryContext || undefined,
         topic_family_id: topicFamilyId || undefined,
+        intelligence_id: selectedIntelligenceId || undefined,
+        skill_id: selectedSkillId || undefined,
+        sub_skill_id: selectedSubSkillId || undefined,
         requested_count: requestedCount,
       };
 
@@ -284,7 +351,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
             >
               <option value="">Any topic family (optional)</option>
-              {TOPIC_FAMILIES.map(family => (
+              {topicFamilies.map(family => (
                 <option key={family.topic_family_id} value={family.topic_family_id}>
                   {family.name}
                 </option>
@@ -317,6 +384,70 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
               disabled={generating}
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5]"
             />
+          </div>
+        </div>
+
+        {/* Filters row 3: Cascading Intelligence -> Skill -> Sub Skill */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Intelligence */}
+          <div>
+            <label htmlFor="intelligence" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Intelligence</label>
+            <select
+              id="intelligence"
+              value={selectedIntelligenceId}
+              onChange={handleIntelligenceChange}
+              disabled={generating}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">Any intelligence (optional)</option>
+              {intelligences.map(intel => (
+                <option key={intel.intelligence_id} value={intel.intelligence_id}>
+                  {intel.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Skill */}
+          <div>
+            <label htmlFor="skill" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Skill</label>
+            <select
+              id="skill"
+              value={selectedSkillId}
+              onChange={handleSkillChange}
+              disabled={generating || !selectedIntelligenceId}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">
+                {selectedIntelligenceId ? "Any skill (optional)" : "Select intelligence first"}
+              </option>
+              {filteredSkills.map(sk => (
+                <option key={sk.skill_id} value={sk.skill_id}>
+                  {sk.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sub Skill */}
+          <div>
+            <label htmlFor="sub-skill" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Sub Skill</label>
+            <select
+              id="sub-skill"
+              value={selectedSubSkillId}
+              onChange={e => setSelectedSubSkillId(e.target.value)}
+              disabled={generating || !selectedSkillId}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="">
+                {selectedSkillId ? "Any sub skill (optional)" : "Select skill first"}
+              </option>
+              {filteredSubSkills.map(ssk => (
+                <option key={ssk.sub_skill_id} value={ssk.sub_skill_id}>
+                  {ssk.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -418,11 +549,16 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                   <div className="flex-1 min-w-0">
                     <h4 className="font-bold text-slate-900 text-[15px]">{c.topic}</h4>
                     <p className="text-slate-500 text-sm mt-1 line-clamp-2">{c.short_description}</p>
-                    <div className="flex items-center gap-3 mt-3 text-xs">
+                    <div className="flex items-center gap-3 mt-3 text-xs flex-wrap">
                       <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-medium">Age: {c.age_suitability}</span>
                       <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200 font-medium">
                         Potential: {c.activity_potential}
                       </span>
+                      {selectedSkillName && (
+                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200 font-medium">
+                          Skill: {selectedSkillName}{selectedSubSkillName ? ` · ${selectedSubSkillName}` : ""}
+                        </span>
+                      )}
                     </div>
                     {err && (
                       <div className="mt-3 p-2 bg-red-100 text-red-700 text-xs rounded-lg border border-red-200 whitespace-pre-wrap font-mono">

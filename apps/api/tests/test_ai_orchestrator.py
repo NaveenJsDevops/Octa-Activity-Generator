@@ -6,7 +6,7 @@ import shutil
 from typing import Optional, Type, Any
 from pydantic import BaseModel
 
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.services.ai.provider import AIProvider
 from apps.api.services.ai.models import GenerationContext, AIResponse
@@ -50,18 +50,18 @@ def temp_data_dir():
     shutil.rmtree(temp_dir)
 
 @pytest.fixture
-def excel_repo(temp_data_dir):
-    repo = ExcelRepository(temp_data_dir)
-    repo.initialize_workbooks()
-    return repo
+def repo(temp_data_dir):
+    r = FirestoreRepository(temp_data_dir)
+    r.initialize_database()
+    return r
 
 @pytest.fixture
-def orchestrator(excel_repo):
+def orchestrator(repo):
     # Temporarily bypass the API key check
     old_key = settings.AI_API_KEY
     settings.AI_API_KEY = "dummy-key-for-tests"
     try:
-        orch = AIOrchestrator(excel_repo)
+        orch = AIOrchestrator(repo)
         orch.provider = MockAIProvider() # Inject mock
         # Set max retries to a low number for faster tests
         orch.max_retries = 2
@@ -69,7 +69,7 @@ def orchestrator(excel_repo):
     finally:
         settings.AI_API_KEY = old_key
 
-def test_structured_response_validation_and_persistence(orchestrator, excel_repo):
+def test_structured_response_validation_and_persistence(orchestrator, repo):
     """Test successful generation, schema validation, and logging."""
     orchestrator.provider.response_content = '{"title": "Space", "score": 100}'
     
@@ -85,8 +85,8 @@ def test_structured_response_validation_and_persistence(orchestrator, excel_repo
     assert result.title == "Space"
     assert result.score == 100
     
-    # 2. Generation ID created and logged in Excel (Persistence)
-    logs = excel_repo.read_sheet("GenerationRuns")
+    # 2. Generation ID created and logged in Persistence
+    logs = repo.read_sheet("GenerationRuns")
     assert len(logs) == 1
     log = logs[0]
     
@@ -97,7 +97,7 @@ def test_structured_response_validation_and_persistence(orchestrator, excel_repo
     assert log["output_tokens"] == 20
     assert json.loads(log["metadata"]) == {"topic_id": "TOP-001"}
 
-def test_malformed_json_handling_and_retry(orchestrator, excel_repo):
+def test_malformed_json_handling_and_retry(orchestrator, repo):
     """Test that malformed JSON triggers retries and eventual failure."""
     orchestrator.provider.response_content = "This is not json"
     
@@ -112,11 +112,11 @@ def test_malformed_json_handling_and_retry(orchestrator, excel_repo):
     assert orchestrator.provider.call_count == 3
     
     # Log should show FAILED
-    logs = excel_repo.read_sheet("GenerationRuns")
+    logs = repo.read_sheet("GenerationRuns")
     assert logs[0]["status"] == GenerationStatus.FAILED
     assert "not valid JSON" in logs[0]["error"]
 
-def test_schema_validation_failure_and_retry(orchestrator, excel_repo):
+def test_schema_validation_failure_and_retry(orchestrator, repo):
     """Test that missing required fields triggers retries and failure."""
     orchestrator.provider.response_content = '{"title": "Space"}' # missing score
     
@@ -128,10 +128,10 @@ def test_schema_validation_failure_and_retry(orchestrator, excel_repo):
         )
         
     assert orchestrator.provider.call_count == 3
-    logs = excel_repo.read_sheet("GenerationRuns")
+    logs = repo.read_sheet("GenerationRuns")
     assert "schema validation" in logs[0]["error"]
 
-def test_timeout_handling_and_retry(orchestrator, excel_repo):
+def test_timeout_handling_and_retry(orchestrator, repo):
     orchestrator.provider.error_to_raise = AITimeoutError("Simulated timeout")
     
     with pytest.raises(AIRetryExhaustedError):
@@ -142,5 +142,5 @@ def test_timeout_handling_and_retry(orchestrator, excel_repo):
         )
         
     assert orchestrator.provider.call_count == 3
-    logs = excel_repo.read_sheet("GenerationRuns")
+    logs = repo.read_sheet("GenerationRuns")
     assert "timeout" in logs[0]["error"].lower()

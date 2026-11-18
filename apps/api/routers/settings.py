@@ -70,9 +70,9 @@ def test_ai_connection():
     This helps identify if API keys are valid or if credits are exhausted (429).
     """
     from apps.api.services.ai.orchestrator import AIOrchestrator
-    from apps.api.repositories.excel import ExcelRepository
+    from apps.api.repositories.firestore import FirestoreRepository
     
-    repo = ExcelRepository(settings.DATA_DIR)
+    repo = FirestoreRepository(settings.DATA_DIR)
     orchestrator = AIOrchestrator(repo)
     
     try:

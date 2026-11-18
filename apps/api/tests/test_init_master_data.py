@@ -1,5 +1,5 @@
 from apps.api.core.config import settings
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.scripts.init_master_data import DEFAULT_TOPIC_FAMILIES, initialize
 
 
@@ -9,7 +9,7 @@ def test_initialize_seeds_master_data_idempotently(tmp_path, monkeypatch):
     initialize()
     initialize()
 
-    repo = ExcelRepository(str(tmp_path))
+    repo = FirestoreRepository(str(tmp_path))
     families = repo.read_sheet("TopicFamilies")
     family_ids = [family["topic_family_id"] for family in families]
 

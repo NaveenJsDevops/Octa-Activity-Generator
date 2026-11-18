@@ -2,22 +2,22 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.models.domain import Topic, TopicStatus, TopicReviewHistory, TopicSkill, TopicKeyword
 from apps.api.models.topic_review import TopicListFilter, TopicEditRequest
 
 class TopicReviewService:
-    def __init__(self, excel_repo: ExcelRepository, user_id: str = "system"):
-        self.excel_repo = excel_repo
+    def __init__(self, repo: FirestoreRepository, user_id: str = "system"):
+        self.repo = repo
         self.user_id = user_id
         
-        self.topics = [Topic(**t) for t in self.excel_repo.read_sheet("Topics")]
-        self.topic_families = self.excel_repo.read_sheet("TopicFamilies")
-        self.intelligences = self.excel_repo.read_sheet("Intelligences")
-        self.skills = self.excel_repo.read_sheet("Skills")
-        self.sub_skills = self.excel_repo.read_sheet("SubSkills")
-        self.topic_skills = [TopicSkill(**t) for t in self.excel_repo.read_sheet("TopicSkills")]
-        self.topic_keywords = [TopicKeyword(**t) for t in self.excel_repo.read_sheet("TopicKeywords")]
+        self.topics = [Topic(**t) for t in self.repo.read_sheet("Topics")]
+        self.topic_families = self.repo.read_sheet("TopicFamilies")
+        self.intelligences = self.repo.read_sheet("Intelligences")
+        self.skills = self.repo.read_sheet("Skills")
+        self.sub_skills = self.repo.read_sheet("SubSkills")
+        self.topic_skills = [TopicSkill(**t) for t in self.repo.read_sheet("TopicSkills")]
+        self.topic_keywords = [TopicKeyword(**t) for t in self.repo.read_sheet("TopicKeywords")]
 
     def _get_topic_by_id(self, topic_id: str) -> Optional[Topic]:
         for t in self.topics:
@@ -36,10 +36,10 @@ class TopicReviewService:
             changed_at=datetime.now(),
             changed_by=self.user_id
         )
-        self.excel_repo.append_record("TopicReviewHistory", history.model_dump(mode="json"))
+        self.repo.append_record("TopicReviewHistory", history.model_dump(mode="json"))
 
     def _update_topic(self, topic: Topic):
-        self.excel_repo.update_record("Topics", topic.topic_id, topic.model_dump(mode="json"))
+        self.repo.update_record("Topics", topic.topic_id, topic.model_dump(mode="json"))
 
     def list_topics(self, filters: TopicListFilter) -> List[Topic]:
         filtered = self.topics
@@ -130,13 +130,13 @@ class TopicReviewService:
         
         if keywords_update is not None:
             # Delete old keywords
-            self.excel_repo.delete_records_by("TopicKeywords", {"topic_id": topic_id})
+            self.repo.delete_records_by("TopicKeywords", {"topic_id": topic_id})
             # Remove from in-memory cache
             self.topic_keywords = [tk for tk in self.topic_keywords if tk.topic_id != topic_id]
             
             for kw in keywords_update:
                 kw_data = {"topic_id": topic_id, "keyword": kw}
-                self.excel_repo.append_record("TopicKeywords", kw_data)
+                self.repo.append_record("TopicKeywords", kw_data)
                 self.topic_keywords.append(TopicKeyword(**kw_data))
             
         return True, "Topic updated successfully"
@@ -194,7 +194,7 @@ class TopicReviewService:
             return False, "Topic not found"
             
         try:
-            self.excel_repo.delete_record("Topics", topic_id)
+            self.repo.delete_record("Topics", topic_id)
             # Remove it from the in-memory cache as well
             self.topics = [t for t in self.topics if t.topic_id != topic_id]
             self._log_history(topic_id, "DELETE", topic.status, topic.status)

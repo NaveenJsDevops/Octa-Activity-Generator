@@ -16,5 +16,7 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
       - key: ALLOWED_USERS
         sync: false

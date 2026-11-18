@@ -4,7 +4,7 @@ import pytest
 import shutil
 from datetime import datetime
 
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.models.enums import TopicStatus
 
 @pytest.fixture
@@ -15,8 +15,8 @@ def temp_data_dir():
 
 @pytest.fixture
 def repo(temp_data_dir):
-    repo = ExcelRepository(temp_data_dir)
-    repo.initialize_workbooks()
+    repo = FirestoreRepository(temp_data_dir)
+    repo.initialize_database()
     
     # Seed master data needed for validation
     repo.append_record("TopicFamilies", {
@@ -40,14 +40,12 @@ def repo(temp_data_dir):
     
     return repo
 
-def test_workbook_and_sheet_creation(repo, temp_data_dir):
-    master_path = os.path.join(temp_data_dir, "master", "Octa_Master.xlsx")
-    assert os.path.exists(master_path)
-    
-    import pandas as pd
-    xls = pd.ExcelFile(master_path)
-    assert "TopicFamilies" in xls.sheet_names
-    assert "Skills" in xls.sheet_names
+def test_repository_initialization(repo, temp_data_dir):
+    repo.initialize_database()
+    assert len(repo.read_sheet("TopicFamilies")) == 1
+    assert len(repo.read_sheet("Skills")) == 1
+    assert len(repo.read_sheet("SubSkills")) == 1
+    assert len(repo.read_sheet("ActivityTypes")) == 1
 
 def test_pydantic_validation_fails(repo):
     # Missing required field `topic_hook` is optional but `topic` is required.

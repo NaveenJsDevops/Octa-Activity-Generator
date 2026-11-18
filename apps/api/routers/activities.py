@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from apps.api.core.config import settings
 from apps.api.models.activity_ideation import ActivityLibraryItem
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.activity_ideation.service import ActivityIdeationService
 from apps.api.services.ai.orchestrator import AIOrchestrator
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/activities", tags=["Activities"])
 
 
 def get_activity_service() -> ActivityIdeationService:
-    repository = ExcelRepository(settings.DATA_DIR)
+    repository = FirestoreRepository(settings.DATA_DIR)
     return ActivityIdeationService(repository, AIOrchestrator(repository))
 
 

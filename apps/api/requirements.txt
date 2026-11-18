@@ -3,7 +3,8 @@ uvicorn
 pydantic
 pydantic-settings
 pandas
-openpyxl
+firebase-admin>=7.8.0
+google-cloud-firestore>=2.34.1
 python-multipart
 openai>=1.0.0
 anthropic>=0.30.0

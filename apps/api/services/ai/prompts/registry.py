@@ -14,7 +14,7 @@ class PromptTemplate(BaseModel):
 class PromptRegistry:
     """
     Foundation for Prompt Versioning.
-    In future phases, this can load prompts from Excel or a local database.
+    In future phases, this can load prompts from Cloud Firestore or a remote registry.
     """
     def __init__(self) -> None:
         self._prompts: Dict[str, PromptTemplate] = {}

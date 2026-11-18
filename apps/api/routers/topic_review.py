@@ -8,13 +8,13 @@ from apps.api.models.topic_review import (
 )
 from apps.api.models.domain import TopicStatus
 from apps.api.services.topic_review.service import TopicReviewService
-from apps.api.repositories.excel import ExcelRepository
+from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.core.config import settings
 
 router = APIRouter(prefix="/api/topics", tags=["Topic Review"])
 
 def get_topic_review_service() -> TopicReviewService:
-    repo = ExcelRepository(settings.DATA_DIR)
+    repo = FirestoreRepository(settings.DATA_DIR)
     return TopicReviewService(repo)
 
 @router.get("", response_model=TopicListResponse)

@@ -3,23 +3,37 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-echo "============================================================"
-echo "    🚀 Starting Octa AI Activity Platform"
-echo "============================================================"
+# Handle optional --build flag
+BUILD_ONLY=false
+if [ "$1" = "--build" ] || [ "$1" = "-b" ]; then
+    BUILD_ONLY=true
+fi
 
-# Function to cleanup background processes on exit
+if [ "$BUILD_ONLY" = true ]; then
+    echo "============================================================"
+    echo "    🔨 Building Octa AI Activity Platform"
+    echo "============================================================"
+else
+    echo "============================================================"
+    echo "    🚀 Starting Octa AI Activity Platform"
+    echo "============================================================"
+fi
+
+# Function to cleanup background processes on exit (only for server mode)
 cleanup() {
-    echo ""
-    echo "🛑 Stopping services..."
-    if [ -n "$BACKEND_PID" ]; then
-        kill -TERM $BACKEND_PID 2>/dev/null || true
-        pkill -P $BACKEND_PID 2>/dev/null || true
+    if [ "$BUILD_ONLY" = false ]; then
+        echo ""
+        echo "🛑 Stopping services..."
+        if [ -n "$BACKEND_PID" ]; then
+            kill -TERM $BACKEND_PID 2>/dev/null || true
+            pkill -P $BACKEND_PID 2>/dev/null || true
+        fi
+        if [ -n "$FRONTEND_PID" ]; then
+            kill -TERM $FRONTEND_PID 2>/dev/null || true
+            pkill -P $FRONTEND_PID 2>/dev/null || true
+        fi
+        echo "✅ All services stopped."
     fi
-    if [ -n "$FRONTEND_PID" ]; then
-        kill -TERM $FRONTEND_PID 2>/dev/null || true
-        pkill -P $FRONTEND_PID 2>/dev/null || true
-    fi
-    echo "✅ All services stopped."
     exit 0
 }
 
@@ -62,6 +76,21 @@ fi
 if [ ! -d "apps/web/node_modules" ]; then
     echo "📦 Installing frontend dependencies..."
     cd apps/web && npm install && cd ../..
+fi
+
+# If --build was requested, run build and exit
+if [ "$BUILD_ONLY" = true ]; then
+    echo "📊 Initializing master data in Cloud Firestore..."
+    PYTHONPATH=. apps/api/venv/bin/python apps/api/scripts/init_master_data.py
+
+    echo "🏗️  Building Frontend (Next.js)..."
+    cd apps/web && npm run build && cd ../..
+
+    echo "============================================================"
+    echo "    ✅ Build complete!"
+    echo "    Run './start.sh' to start development servers."
+    echo "============================================================"
+    exit 0
 fi
 
 # 1. Start the Backend
@@ -110,11 +139,11 @@ try:
     print(f'API Status:      🟢 Running ({data.get(\"status\")})')
     print(f'Environment:     {data.get(\"environment\")}')
     
-    excel = data.get('excel', {})
-    if excel.get('configured') and excel.get('initialized'):
-        print(f'Excel Storage:   🟢 Configured and Initialized')
+    db = data.get('database', {})
+    if db.get('configured'):
+        print(f'Database:        🟢 Cloud Firestore ({db.get(\"status\")}, Project: {db.get(\"project\")})')
     else:
-        print(f'Excel Storage:   🔴 Not initialized')
+        print(f'Database:        🟡 In-Memory Mode')
         
     ai = data.get('ai', {})
     if ai.get('configured'):
