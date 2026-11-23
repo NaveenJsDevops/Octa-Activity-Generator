@@ -66,6 +66,13 @@ class TopicReviewService:
                 (t.short_description and search_lower in t.short_description.lower()) or 
                 (t.full_description and search_lower in t.full_description.lower())
             ]
+
+        # Ensure latest topics show on top (newest created_at first)
+        def _get_sort_key(t: Topic):
+            dt = t.created_at or datetime.min
+            return (dt, t.topic_id)
+
+        filtered.sort(key=_get_sort_key, reverse=True)
             
         return filtered
 

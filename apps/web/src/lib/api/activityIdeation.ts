@@ -11,6 +11,8 @@ export interface TopicDetail {
     target_class?: string;
     country_context?: string;
     status: string;
+    created_at?: string;
+    updated_at?: string;
   };
   topic_family_name: string;
   keywords: string[];

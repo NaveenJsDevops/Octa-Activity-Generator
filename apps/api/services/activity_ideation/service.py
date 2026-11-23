@@ -84,6 +84,22 @@ class ActivityIdeationService:
             detail = topic_service.get_topic_detail(topic["topic_id"])
             if detail:
                 eligible.append(detail)
+
+        def _topic_sort_key(item: dict):
+            top = item.get("topic")
+            dt = getattr(top, "created_at", None) if top else None
+            if isinstance(top, dict):
+                dt = top.get("created_at")
+            if not dt:
+                return datetime.min
+            if isinstance(dt, str):
+                try:
+                    return datetime.fromisoformat(dt.replace("Z", "+00:00"))
+                except Exception:
+                    return datetime.min
+            return dt
+
+        eligible.sort(key=_topic_sort_key, reverse=True)
         return eligible
 
     def _duplicate_checker(self, exclude_activity_id: Optional[str] = None) -> DuplicateChecker:
@@ -599,6 +615,21 @@ educational metadata. Do not put these metadata in place of any template content
                 "topic_title": topic.get("topic", "Unknown topic"),
                 "skills": mapped_skills,
             })
+
+        # Ensure latest approved activities show on top (newest created_at first)
+        def _activity_sort_key(item: dict):
+            act = item.get("activity", {})
+            created = act.get("created_at")
+            if not created:
+                return (datetime.min, act.get("activity_id", ""))
+            if isinstance(created, str):
+                try:
+                    created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                except Exception:
+                    created = datetime.min
+            return (created, act.get("activity_id", ""))
+
+        results.sort(key=_activity_sort_key, reverse=True)
         return results
 
     def get_activity(self, activity_id: str) -> dict:

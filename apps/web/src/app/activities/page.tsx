@@ -37,15 +37,41 @@ function ActivityGenerationContent() {
     };
   }, [preselectedTopicId, refreshKey]);
 
+  const [familyFilter, setFamilyFilter] = useState("ALL");
+
+  const families = useMemo(() => {
+    const set = new Set<string>();
+    topics.forEach(t => {
+      if (t.topic_family_name) set.add(t.topic_family_name);
+    });
+    return Array.from(set).sort();
+  }, [topics]);
+
   const filteredTopics = useMemo(() => {
+    let list = [...topics];
+
+    // Sort newest first by default
+    list.sort((a, b) => {
+      const dtA = a.topic.created_at ? new Date(a.topic.created_at).getTime() : 0;
+      const dtB = b.topic.created_at ? new Date(b.topic.created_at).getTime() : 0;
+      if (dtB !== dtA) return dtB - dtA;
+      return (b.topic.topic_id || "").localeCompare(a.topic.topic_id || "");
+    });
+
+    if (familyFilter !== "ALL") {
+      list = list.filter((item) => item.topic_family_name === familyFilter);
+    }
+
     const search = query.trim().toLowerCase();
-    if (!search) return topics;
-    return topics.filter((item) =>
-      `${item.topic.topic} ${item.topic.short_description || ""} ${item.topic_family_name} ${item.keywords.join(" ")}`
-        .toLowerCase()
-        .includes(search),
-    );
-  }, [topics, query]);
+    if (search) {
+      list = list.filter((item) =>
+        `${item.topic.topic} ${item.topic.short_description || ""} ${item.topic_family_name} ${item.keywords.join(" ")}`
+          .toLowerCase()
+          .includes(search),
+      );
+    }
+    return list;
+  }, [topics, query, familyFilter]);
 
   const selectedTopic = topics.find((item) => item.topic.topic_id === selectedId);
 
@@ -98,15 +124,29 @@ function ActivityGenerationContent() {
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-bold text-slate-900">Step 1: Choose an approved topic</h2>
-          <label className="relative mb-4 block">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search approved topics..."
-              className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#5B50F5] focus:ring-2 focus:ring-[#5B50F5]/20"
-            />
-          </label>
+          <div className="mb-4 flex flex-col sm:flex-row gap-2">
+            <label className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search approved topics..."
+                className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#5B50F5] focus:ring-2 focus:ring-[#5B50F5]/20"
+              />
+            </label>
+            {families.length > 0 && (
+              <select
+                value={familyFilter}
+                onChange={(e) => setFamilyFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:bg-white focus:border-[#5B50F5] cursor-pointer"
+              >
+                <option value="ALL">All Topic Types</option>
+                {families.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            )}
+          </div>
           {loading ? (
             <p className="py-10 text-center text-sm text-slate-500">Loading approved topics...</p>
           ) : filteredTopics.length === 0 ? (
