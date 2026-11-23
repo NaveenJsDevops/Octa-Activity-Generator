@@ -318,6 +318,10 @@ def test_topic_discovery_with_intelligence_and_skills(service, orchestrator, rep
     assert matching_skills[0]["relationship_type"] == "PRIMARY"
 
 def test_topic_discovery_user_selected_and_ai_suggested_mappings_distinction(service, orchestrator, repo):
+    repo.append_record("Skills", {"skill_id": "SK-002", "intelligence_id": "INT-002", "name": "Data Analysis"})
+    repo.append_record("Skills", {"skill_id": "SK-003", "intelligence_id": "INT-002", "name": "Eco-Awareness"})
+    repo.append_record("SubSkills", {"sub_skill_id": "SS-002", "skill_id": "SK-002", "name": "Sensor Calibration"})
+
     request = TopicDiscoveryRequest(
         age_min=8,
         age_max=10,
@@ -338,7 +342,7 @@ def test_topic_discovery_user_selected_and_ai_suggested_mappings_distinction(ser
                 age_suitability="8-10",
                 keywords=["weather", "sensors"],
                 suggested_intelligence="Environmental",
-                suggested_skills=["Data Analysis", "Eco-awareness"],
+                suggested_skills=["Data Analysis", "Eco-Awareness"],
                 suggested_sub_skills=["Sensor Calibration"]
             )
         ]
@@ -361,7 +365,7 @@ def test_topic_discovery_user_selected_and_ai_suggested_mappings_distinction(ser
     assert candidate["user_selected_skills"] == ["Observation"]
     assert candidate["user_selected_sub_skills"] == ["Visual Analysis"]
     assert candidate["suggested_intelligence"] == "Environmental"
-    assert candidate["suggested_skills"] == ["Data Analysis", "Eco-awareness"]
+    assert candidate["suggested_skills"] == ["Data Analysis", "Eco-Awareness"]
     assert candidate["suggested_sub_skills"] == ["Sensor Calibration"]
 
     # Save candidate
@@ -373,10 +377,13 @@ def test_topic_discovery_user_selected_and_ai_suggested_mappings_distinction(ser
     assert topic_data["user_selected_skills"] == ["Observation"]
     assert topic_data["user_selected_sub_skills"] == ["Visual Analysis"]
     assert topic_data["suggested_intelligence"] == "Environmental"
-    assert topic_data["suggested_skills"] == ["Data Analysis", "Eco-awareness"]
+    assert topic_data["suggested_skills"] == ["Data Analysis", "Eco-Awareness"]
     assert topic_data["suggested_sub_skills"] == ["Sensor Calibration"]
 
 def test_topic_discovery_without_user_selection_shows_ai_suggested(service, orchestrator, repo):
+    repo.append_record("Skills", {"skill_id": "SK-004", "intelligence_id": "INT-003", "name": "Craftsmanship"})
+    repo.append_record("SubSkills", {"sub_skill_id": "SS-003", "skill_id": "SK-004", "name": "Pattern Recognition"})
+
     request = TopicDiscoveryRequest(
         age_min=6,
         age_max=8,

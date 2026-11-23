@@ -132,8 +132,37 @@ class TopicDiscoveryService:
             prompt_version=prompt_tmpl.version
         )
 
-        # Attach user selection parameters separately to every candidate
+        # Validate, normalize, and ensure canonical master data mappings for every candidate
+        resolver = SkillResolver(
+            [Skill(**s) for s in skills],
+            [SubSkill(**ss) for ss in sub_skills]
+        )
+
         for c in ai_output.topics:
+            norm_intel = resolver.resolve_intelligence(c.suggested_intelligence)
+            norm_skills = resolver.resolve_skill_names(c.suggested_skills or [])
+            norm_sub_skills = resolver.resolve_sub_skill_names(c.suggested_sub_skills or [])
+
+            # If any AI suggested mapping is missing or non-canonical, infer from topic details
+            if not norm_intel or not norm_skills or not norm_sub_skills:
+                inf_intel, inf_skills, inf_sub_skills = resolver.infer_for_topic(
+                    topic_title=c.topic,
+                    topic_family_name=topic_family_name,
+                    keywords=c.keywords,
+                    description=c.full_description or c.short_description
+                )
+                if not norm_intel:
+                    norm_intel = inf_intel
+                if not norm_skills:
+                    norm_skills = inf_skills
+                if not norm_sub_skills:
+                    norm_sub_skills = inf_sub_skills
+
+            c.suggested_intelligence = norm_intel
+            c.suggested_skills = norm_skills
+            c.suggested_sub_skills = norm_sub_skills
+
+            # Attach user selection parameters separately to every candidate
             c.user_selected_intelligence = intel_name
             c.user_selected_skills = [skill_name] if skill_name else []
             c.user_selected_sub_skills = [sub_skill_name] if sub_skill_name else []

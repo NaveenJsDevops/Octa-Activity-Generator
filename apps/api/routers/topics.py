@@ -23,7 +23,7 @@ def get_prompt_registry() -> PromptRegistry:
     registry.register_prompt(PromptTemplate(
         prompt_name="topic_discovery",
         version="v1.1",
-        system_prompt="You are an expert curriculum designer for Octa Kids. Generate engaging, unique activity topics with precise intelligence and skills mapping.",
+        system_prompt="You are an expert curriculum designer for Octa Kids. Generate engaging, unique activity topics strictly aligned with our educational taxonomy.",
         user_prompt_template=(
             "Generate {requested_count} topic candidates for age {age_min} to {age_max} (Class: {target_class}).\n"
             "Topic family: {topic_family_name}. Context: {country_context}.\n"
@@ -31,10 +31,10 @@ def get_prompt_registry() -> PromptRegistry:
             "Use these keywords for inspiration: {keyword_context}.\n"
             "Web Research Info to guide topics:\n{web_research_context}\n\n"
             "Ensure topics are highly engaging, educational, and suitable for the age group.\n"
-            "For each topic candidate, include:\n"
-            "1. 'suggested_intelligence': The primary intelligence category this topic develops (e.g. Artistic, Arithmetic, Communication, Cognitive, Creative, Emotional, Environmental, Social).\n"
-            "2. 'suggested_skills': A list of 1 to 3 key skills cultivated by this topic.\n"
-            "3. 'suggested_sub_skills': A list of 1 to 3 specific sub-skills practiced in this topic.\n"
+            "CRITICAL: For every topic candidate, you MUST populate 'suggested_intelligence', 'suggested_skills', and 'suggested_sub_skills' strictly using our official taxonomy:\n"
+            "1. 'suggested_intelligence': MUST be exactly one of: Artistic, Arithmetic, Communication, Cognitive, Creative, Emotional, Environmental, Social. (Never combine or invent categories like 'Multidisciplinary').\n"
+            "2. 'suggested_skills': 1 to 3 skills selected from our official skills: Artistic Expression, Craftsmanship, Data Analysis, Financial Literacy, Mathematical Thinking & Calculations, Numerical Patterns, Listening, Verbal Expression, Written Expression, Conceptualization, Critical Thinking, Decision-Making, Logical Reasoning, Observation, Systems Thinking, Abstract Thinking, Adaptability, Curiosity, Experimentation, Exploration, Imagination, Lateral Thinking, Mindfulness, Positive Reinforcement, Self-Awareness, Self-Motivation, Self-Regulation, Eco-Awareness, Spatial Awareness, Collaboration, Conflict Resolution, Constructive Feedback, Empathy, Group Dynamics, Leadership, Trust-Building.\n"
+            "3. 'suggested_sub_skills': 1 to 3 specific sub-skills matching the selected skills from our official catalogue (e.g. Exploring Visual Art Techniques, Analyzing Elements of Artwork, Graphing and Charting, Problem Solving with Numbers, Active Listening, Structuring a Story, Analysis, Critical Thinking, Pattern Recognition, In-depth Exploration, Hypothesis Testing, Prototyping, Understanding Ecosystems, Biodiversity and Conservation, Teamwork Strategies, Perspective-Taking).\n"
             "IMPORTANT: 'activity_potential' MUST be exactly one of: HIGH, MEDIUM, or LOW.\n"
             "Do NOT include explanations, sentences, or natural language in 'activity_potential'."
         ),

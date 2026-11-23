@@ -655,7 +655,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                           <div>
                             <span className="text-slate-400 font-medium mr-1.5">Suggested Intelligence:</span>
                             <span className="font-semibold text-[#5B50F5]">
-                              {c.suggested_intelligence || "Cognitive / Multidisciplinary"}
+                              {c.suggested_intelligence || "None"}
                             </span>
                           </div>
                           <div>

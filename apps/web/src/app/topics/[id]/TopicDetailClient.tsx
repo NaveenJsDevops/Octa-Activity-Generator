@@ -633,7 +633,7 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
                 <div>
                   <span className="text-slate-400 font-medium block mb-0.5">Suggested Intelligence:</span>
                   <span className="font-semibold text-[#5B50F5] text-sm">
-                    {suggested.intelligence || "Cognitive & Multidisciplinary"}
+                    {suggested.intelligence || "None identified"}
                   </span>
                 </div>
                 <div>

@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from apps.api.repositories.firestore import FirestoreRepository
-from apps.api.models.domain import Topic, TopicStatus, TopicReviewHistory, TopicSkill, TopicKeyword
+from apps.api.models.domain import Topic, TopicStatus, TopicReviewHistory, TopicSkill, TopicKeyword, Skill, SubSkill
 from apps.api.models.topic_review import TopicListFilter, TopicEditRequest
+from apps.api.services.topic_discovery.skill_resolver import SkillResolver
 
 class TopicReviewService:
     def __init__(self, repo: FirestoreRepository, user_id: str = "system"):
@@ -116,6 +117,48 @@ class TopicReviewService:
         sugg_intel = getattr(topic, "suggested_intelligence", None)
         sugg_skills = list(getattr(topic, "suggested_skills", []) or [])
         sugg_sub_skills = list(getattr(topic, "suggested_sub_skills", []) or [])
+
+        # Validate and normalize suggested mappings against master data catalogue
+        resolver = SkillResolver(
+            [Skill(**s) for s in self.skills],
+            [SubSkill(**ss) for ss in self.sub_skills]
+        )
+
+        norm_sugg_intel = resolver.resolve_intelligence(sugg_intel)
+        norm_sugg_skills = resolver.resolve_skill_names(sugg_skills)
+        norm_sugg_sub_skills = resolver.resolve_sub_skill_names(sugg_sub_skills)
+
+        # If any suggested mapping is missing or empty, infer it canonically from topic data
+        if not norm_sugg_intel or not norm_sugg_skills or not norm_sugg_sub_skills:
+            inf_intel, inf_skills, inf_sub_skills = resolver.infer_for_topic(
+                topic_title=topic.topic,
+                topic_family_name=family_name,
+                keywords=keywords,
+                description=topic.full_description or topic.short_description
+            )
+            if not norm_sugg_intel:
+                norm_sugg_intel = inf_intel
+            if not norm_sugg_skills:
+                norm_sugg_skills = inf_skills
+            if not norm_sugg_sub_skills:
+                norm_sugg_sub_skills = inf_sub_skills
+
+            # Persist canonical inferred values back onto topic
+            topic.suggested_intelligence = norm_sugg_intel
+            topic.suggested_skills = norm_sugg_skills
+            topic.suggested_sub_skills = norm_sugg_sub_skills
+            try:
+                self.repo.update_record("Topics", topic_id, {
+                    "suggested_intelligence": norm_sugg_intel,
+                    "suggested_skills": norm_sugg_skills,
+                    "suggested_sub_skills": norm_sugg_sub_skills
+                })
+            except Exception:
+                pass
+
+        sugg_intel = norm_sugg_intel
+        sugg_skills = norm_sugg_skills
+        sugg_sub_skills = norm_sugg_sub_skills
 
         # If user_selected was not stored on topic, use primary resolved_skills if present
         if not user_sel_skills and resolved_skills:
