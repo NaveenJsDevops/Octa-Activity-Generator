@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 
 from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.models.domain import Topic, TopicStatus, TopicReviewHistory, TopicSkill, TopicKeyword, Skill, SubSkill
+from apps.api.models.enums import ActivityPotential
 from apps.api.models.topic_review import TopicListFilter, TopicEditRequest
 from apps.api.services.topic_discovery.skill_resolver import SkillResolver
 
@@ -201,9 +202,34 @@ class TopicReviewService:
         # Apply updates
         update_data = edit_req.model_dump(exclude_unset=True)
         keywords_update = update_data.pop("keywords", None)
-        
+
+        # Handle legacy or alternative field mappings
+        why_interesting = update_data.pop("why_interesting", None)
+        topic_hook = update_data.pop("topic_hook", None)
+
+        if why_interesting is not None:
+            topic.why_interesting = why_interesting
+            if not update_data.get("full_description"):
+                topic.full_description = why_interesting
+
+        if topic_hook is not None:
+            topic.topic_hook = topic_hook
+            if not update_data.get("short_description"):
+                topic.short_description = topic_hook
+
+        # Normalize activity_potential enum if provided as string
+        if "activity_potential" in update_data and update_data["activity_potential"] is not None:
+            ap_val = update_data["activity_potential"]
+            if isinstance(ap_val, str):
+                try:
+                    update_data["activity_potential"] = ActivityPotential(ap_val.upper())
+                except ValueError:
+                    pass
+
+        topic_fields = set(Topic.model_fields.keys())
         for k, v in update_data.items():
-            setattr(topic, k, v)
+            if k in topic_fields or hasattr(topic, k):
+                setattr(topic, k, v)
             
         topic.updated_at = datetime.now()
         self._update_topic(topic)

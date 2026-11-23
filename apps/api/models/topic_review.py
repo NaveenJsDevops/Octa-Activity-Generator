@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from apps.api.models.domain import TopicStatus, Topic
@@ -24,6 +24,7 @@ class TopicListResponse(BaseModel):
     total: int
 
 class TopicEditRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     topic: Optional[str] = None
     topic_hook: Optional[str] = None
     short_description: Optional[str] = None
@@ -36,6 +37,12 @@ class TopicEditRequest(BaseModel):
     target_class: Optional[str] = None
     country_context: Optional[str] = None
     keywords: Optional[List[str]] = None
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: Optional[List[str]] = None
+    user_selected_sub_skills: Optional[List[str]] = None
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: Optional[List[str]] = None
+    suggested_sub_skills: Optional[List[str]] = None
 
 class RejectTopicRequest(BaseModel):
     reason: str = Field(..., min_length=3)

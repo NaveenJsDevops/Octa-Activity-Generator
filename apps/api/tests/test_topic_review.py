@@ -77,6 +77,35 @@ def test_edit_topic(client):
     res2 = client.get("/api/topics/TOP-1")
     assert res2.json()["topic"]["topic"] == "Cool Bugs"
 
+def test_edit_topic_with_full_fields_and_legacy_aliases(client):
+    # Tests the exact payload structure sent by the frontend edit form, including why_interesting and activity_potential
+    res = client.patch("/api/topics/TOP-1", json={
+        "topic": "Super Cool Bugs",
+        "full_description": "Detailed exploration of insect biology and ecosystem roles.",
+        "short_description": "Exploring insect biology.",
+        "why_interesting": "Detailed exploration of insect biology and ecosystem roles.",
+        "age_min": 6,
+        "age_max": 8,
+        "country_context": "India",
+        "activity_potential": "HIGH",
+        "keywords": ["insects", "nature", "biodiversity"]
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+
+    res2 = client.get("/api/topics/TOP-1")
+    assert res2.status_code == 200
+    topic_data = res2.json()["topic"]
+    assert topic_data["topic"] == "Super Cool Bugs"
+    assert topic_data["full_description"] == "Detailed exploration of insect biology and ecosystem roles."
+    assert topic_data["short_description"] == "Exploring insect biology."
+    assert topic_data["age_min"] == 6
+    assert topic_data["age_max"] == 8
+    assert topic_data["country_context"] == "India"
+    assert topic_data["activity_potential"] == "HIGH"
+    assert "insects" in res2.json()["keywords"]
+
 def test_state_transitions(client):
     # DRAFT -> REVIEW
     res = client.post("/api/topics/TOP-1/review")

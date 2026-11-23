@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 import json
@@ -34,6 +34,7 @@ class ActivityType(BaseModel):
 
 # Topic Domain
 class Topic(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     topic_id: str
     topic: str
     short_description: Optional[str] = None
@@ -57,6 +58,8 @@ class Topic(BaseModel):
     suggested_intelligence: Optional[str] = None
     suggested_skills: Optional[List[str]] = Field(default_factory=list)
     suggested_sub_skills: Optional[List[str]] = Field(default_factory=list)
+    why_interesting: Optional[str] = None
+    topic_hook: Optional[str] = None
 
 class TopicSkill(BaseModel):
     topic_id: str
