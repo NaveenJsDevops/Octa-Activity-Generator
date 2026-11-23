@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     repo = FirestoreRepository(settings.DATA_DIR)
     repo.initialize_database()
     ensure_default_master_data(repo)
-    if firestore_manager.is_available:
+    if firestore_manager.is_available and not os.getenv("PYTEST_CURRENT_TEST"):
         firestore_manager.sync_all_to_firestore(repo, synchronous=False)
     yield
 

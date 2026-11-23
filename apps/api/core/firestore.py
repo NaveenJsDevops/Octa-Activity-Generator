@@ -310,6 +310,11 @@ class FirestoreManager:
                     records = repo.read_sheet(sheet_name)
                     if not records:
                         continue
+                    # Check if collection already has documents in Firestore to avoid quota exhaustion
+                    existing = list(self.db.collection(collection_name).limit(1).stream())
+                    if existing:
+                        continue
+
                     batch = self.db.batch()
                     count = 0
                     for record in records:
