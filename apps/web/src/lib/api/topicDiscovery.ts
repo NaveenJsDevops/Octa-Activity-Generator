@@ -3,15 +3,17 @@ import { API_BASE_URL } from "@/lib/apiBase";
 
 export interface TopicDiscoveryRequest {
   keywords: string[];
-
   age_min: number;
   age_max: number;
   target_class?: string;
   country_context?: string;
   topic_family_id?: string;
   intelligence_id?: string;
+  intelligence_name?: string;
   skill_id?: string;
+  skill_name?: string;
   sub_skill_id?: string;
+  sub_skill_name?: string;
   requested_count: number;
 }
 
@@ -21,14 +23,27 @@ export interface TopicCandidate {
   full_description: string;
   activity_potential: string;
   age_suitability: string;
-
   keywords: string[];
+  suggested_intelligence?: string;
+  suggested_skills?: string[];
+  suggested_sub_skills?: string[];
+  user_selected_intelligence?: string;
+  user_selected_skills?: string[];
+  user_selected_sub_skills?: string[];
 }
 
 export interface TopicDiscoveryResult {
   session_id: string;
   candidates: TopicCandidate[];
   research_sources: any[];
+  user_selections?: {
+    intelligence_id?: string;
+    intelligence_name?: string;
+    skill_id?: string;
+    skill_name?: string;
+    sub_skill_id?: string;
+    sub_skill_name?: string;
+  };
 }
 
 export async function discoverTopics(request: TopicDiscoveryRequest): Promise<TopicDiscoveryResult> {

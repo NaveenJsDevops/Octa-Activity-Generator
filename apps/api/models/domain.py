@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 import json
 from apps.api.models.enums import TopicStatus, ActivityStatus, RelationshipType, GenerationStatus, QualityStatus, ActivityPotential
@@ -51,6 +51,12 @@ class Topic(BaseModel):
     updated_at: datetime
     created_by: str
     generation_id: Optional[str] = None
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: Optional[List[str]] = Field(default_factory=list)
+    user_selected_sub_skills: Optional[List[str]] = Field(default_factory=list)
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: Optional[List[str]] = Field(default_factory=list)
+    suggested_sub_skills: Optional[List[str]] = Field(default_factory=list)
 
 class TopicSkill(BaseModel):
     topic_id: str

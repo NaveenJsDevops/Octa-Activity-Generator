@@ -24,6 +24,9 @@ import {
   Search,
   XCircle,
   CalendarClock,
+  Sparkles,
+  UserCheck,
+  Compass,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/dateTime";
 
@@ -265,6 +268,18 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
 
   const descriptionText: string =
     topic.full_description || topic.short_description || topic.why_interesting || topic.topic_hook || "";
+
+  const userSelected = data?.mappings?.user_selected || {
+    intelligence: topic.user_selected_intelligence,
+    skills: topic.user_selected_skills || [],
+    sub_skills: topic.user_selected_sub_skills || [],
+  };
+
+  const suggested = data?.mappings?.suggested || {
+    intelligence: topic.suggested_intelligence,
+    skills: topic.suggested_skills || [],
+    sub_skills: topic.suggested_sub_skills || [],
+  };
 
   const paragraphs: string[] = descriptionText
     ? descriptionText.split(/\n+/).filter(Boolean)
@@ -547,6 +562,112 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
                         <span className="text-xs text-slate-400 italic">No keywords</span>
                       )}
                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Intelligence, Skills & Sub-skills Mapping Details */}
+        <div className="pt-6 border-t border-slate-100 space-y-4">
+          <div className="flex items-center gap-2">
+            <Compass className="w-5 h-5 text-[#5B50F5]" />
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Intelligence, Skills &amp; Sub-skills Mapping
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* User-Selected Parameters */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
+                  <UserCheck className="w-4 h-4 text-slate-500" />
+                  <span>User-Selected Parameters</span>
+                </div>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-200/70 text-slate-700">
+                  {userSelected.intelligence || (userSelected.skills && userSelected.skills.length > 0) ? "Specified by User" : "Open Discovery"}
+                </span>
+              </div>
+
+              <div className="space-y-2.5 text-xs text-slate-600">
+                <div>
+                  <span className="text-slate-400 font-medium block mb-0.5">User-Selected Intelligence:</span>
+                  <span className="font-semibold text-slate-900 text-sm">
+                    {userSelected.intelligence || "None (Open Discovery)"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block mb-0.5">User-Selected Skills:</span>
+                  <span className="font-semibold text-slate-900 text-sm">
+                    {userSelected.skills && userSelected.skills.length > 0
+                      ? userSelected.skills.join(", ")
+                      : "None"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block mb-0.5">User-Selected Sub-skills:</span>
+                  <span className="font-semibold text-slate-900 text-sm">
+                    {userSelected.sub_skills && userSelected.sub_skills.length > 0
+                      ? userSelected.sub_skills.join(", ")
+                      : "None"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* AI-Suggested Mappings */}
+            <div className="rounded-2xl border border-indigo-100 bg-[#FAF9FF] p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[#5B50F5] font-bold text-xs uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4" />
+                  <span>AI-Suggested Mappings</span>
+                </div>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-[#5B50F5]">
+                  AI Recommended
+                </span>
+              </div>
+
+              <div className="space-y-2.5 text-xs text-slate-600">
+                <div>
+                  <span className="text-slate-400 font-medium block mb-0.5">Suggested Intelligence:</span>
+                  <span className="font-semibold text-[#5B50F5] text-sm">
+                    {suggested.intelligence || "Cognitive & Multidisciplinary"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block mb-0.5">Suggested Skills:</span>
+                  {suggested.skills && suggested.skills.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {suggested.skills.map((s: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-indigo-200 text-[#5B50F5] font-semibold text-xs shadow-xs"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic">None suggested</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block mb-0.5">Suggested Sub-skills:</span>
+                  {suggested.sub_skills && suggested.sub_skills.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {suggested.sub_skills.map((ss: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-violet-200 text-violet-700 font-semibold text-xs shadow-xs"
+                        >
+                          {ss}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic">None suggested</span>
                   )}
                 </div>
               </div>

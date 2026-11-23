@@ -107,12 +107,43 @@ class TopicReviewService:
             })
             
         keywords = [tk.keyword for tk in self.topic_keywords if tk.topic_id == topic_id]
-        
+
+        # Resolve user-selected and AI-suggested mappings
+        user_sel_intel = getattr(topic, "user_selected_intelligence", None)
+        user_sel_skills = list(getattr(topic, "user_selected_skills", []) or [])
+        user_sel_sub_skills = list(getattr(topic, "user_selected_sub_skills", []) or [])
+
+        sugg_intel = getattr(topic, "suggested_intelligence", None)
+        sugg_skills = list(getattr(topic, "suggested_skills", []) or [])
+        sugg_sub_skills = list(getattr(topic, "suggested_sub_skills", []) or [])
+
+        # If user_selected was not stored on topic, use primary resolved_skills if present
+        if not user_sel_skills and resolved_skills:
+            for rs in resolved_skills:
+                if rs["skill_name"] not in user_sel_skills:
+                    user_sel_skills.append(rs["skill_name"])
+                if rs["sub_skill_name"] not in user_sel_sub_skills:
+                    user_sel_sub_skills.append(rs["sub_skill_name"])
+                if not user_sel_intel and rs["intelligence_name"] != "Unknown Intelligence":
+                    user_sel_intel = rs["intelligence_name"]
+
         return {
             "topic": topic,
             "topic_family_name": family_name,
             "skills": resolved_skills,
-            "keywords": keywords
+            "keywords": keywords,
+            "mappings": {
+                "user_selected": {
+                    "intelligence": user_sel_intel,
+                    "skills": user_sel_skills,
+                    "sub_skills": user_sel_sub_skills
+                },
+                "suggested": {
+                    "intelligence": sugg_intel,
+                    "skills": sugg_skills,
+                    "sub_skills": sugg_sub_skills
+                }
+            }
         }
 
     def edit_topic(self, topic_id: str, edit_req: TopicEditRequest) -> Tuple[bool, str]:

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, Sparkles, Loader2, AlertCircle, X, Check, Globe, CheckCircle, ArrowRight } from "lucide-react";
+import { Search, Sparkles, Loader2, AlertCircle, X, Check, Globe, CheckCircle, ArrowRight, UserCheck, Brain, Compass } from "lucide-react";
 import { discoverTopics, keepCandidate, rejectCandidate, keepAllCandidates, TopicDiscoveryRequest, TopicDiscoveryResult } from "@/lib/api/topicDiscovery";
 import {
   fetchMasterData,
@@ -81,26 +81,65 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
       });
   }, []);
 
-  // Filter skills based on selected intelligence
+  // Filter skills based on selected intelligence (or show all if none selected)
   const filteredSkills = useMemo(() => {
-    if (!selectedIntelligenceId) return [];
+    if (!selectedIntelligenceId) return skills;
     return skills.filter(s => s.intelligence_id === selectedIntelligenceId);
   }, [skills, selectedIntelligenceId]);
 
   // Filter sub-skills based on selected skill
   const filteredSubSkills = useMemo(() => {
-    if (!selectedSkillId) return [];
+    if (!selectedSkillId) return subSkills;
     return subSkills.filter(ss => ss.skill_id === selectedSkillId);
   }, [subSkills, selectedSkillId]);
 
+  const selectedIntelligenceName = useMemo(() => {
+    return intelligences.find(i => i.intelligence_id === selectedIntelligenceId)?.name;
+  }, [intelligences, selectedIntelligenceId]);
+
   const handleIntelligenceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedIntelligenceId(e.target.value);
-    setSelectedSkillId("");
-    setSelectedSubSkillId("");
+    const newIntelId = e.target.value;
+    setSelectedIntelligenceId(newIntelId);
+    // If the currently selected skill does not belong to the newly selected intelligence, clear it
+    if (newIntelId && selectedSkillId) {
+      const currentSkill = skills.find(s => s.skill_id === selectedSkillId);
+      if (currentSkill && currentSkill.intelligence_id !== newIntelId) {
+        setSelectedSkillId("");
+        setSelectedSubSkillId("");
+      }
+    }
   };
 
   const handleSkillChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedSkillId(e.target.value);
+    const sId = e.target.value;
+    setSelectedSkillId(sId);
+    setSelectedSubSkillId("");
+    if (sId && !selectedIntelligenceId) {
+      const match = skills.find(s => s.skill_id === sId);
+      if (match?.intelligence_id) {
+        setSelectedIntelligenceId(match.intelligence_id);
+      }
+    }
+  };
+
+  const handleSubSkillChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const ssId = e.target.value;
+    setSelectedSubSkillId(ssId);
+    if (ssId && !selectedSkillId) {
+      const matchSub = subSkills.find(ss => ss.sub_skill_id === ssId);
+      if (matchSub?.skill_id) {
+        setSelectedSkillId(matchSub.skill_id);
+        const matchSkill = skills.find(s => s.skill_id === matchSub.skill_id);
+        if (matchSkill?.intelligence_id) {
+          setSelectedIntelligenceId(matchSkill.intelligence_id);
+        }
+      }
+    }
+  };
+
+  const clearEducationalSelections = () => {
+    setSelectedIntelligenceId("");
+    setSelectedSkillId("");
     setSelectedSubSkillId("");
   };
 
@@ -157,8 +196,11 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
         country_context: countryContext || undefined,
         topic_family_id: topicFamilyId || undefined,
         intelligence_id: selectedIntelligenceId || undefined,
+        intelligence_name: selectedIntelligenceName || undefined,
         skill_id: selectedSkillId || undefined,
+        skill_name: selectedSkillName || undefined,
         sub_skill_id: selectedSubSkillId || undefined,
+        sub_skill_name: selectedSubSkillName || undefined,
         requested_count: requestedCount,
       };
 
@@ -387,67 +429,80 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
           </div>
         </div>
 
-        {/* Filters row 3: Cascading Intelligence -> Skill -> Sub Skill */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Intelligence */}
-          <div>
-            <label htmlFor="intelligence" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Intelligence</label>
-            <select
-              id="intelligence"
-              value={selectedIntelligenceId}
-              onChange={handleIntelligenceChange}
-              disabled={generating}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">Any intelligence (optional)</option>
-              {intelligences.map(intel => (
-                <option key={intel.intelligence_id} value={intel.intelligence_id}>
-                  {intel.name}
-                </option>
-              ))}
-            </select>
+        {/* Filters row 3: Optional Intelligence -> Skill -> Sub Skill */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-[#5B50F5]" />
+              Educational Focus (Optional Selection Parameters)
+            </span>
+            {(selectedIntelligenceId || selectedSkillId || selectedSubSkillId) && (
+              <button
+                type="button"
+                onClick={clearEducationalSelections}
+                className="text-xs font-semibold text-[#5B50F5] hover:text-[#4740d4] hover:underline"
+              >
+                Clear focus selections
+              </button>
+            )}
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Intelligence */}
+            <div>
+              <label htmlFor="intelligence" className="block text-xs font-medium text-slate-500 mb-1">Intelligence</label>
+              <select
+                id="intelligence"
+                value={selectedIntelligenceId}
+                onChange={handleIntelligenceChange}
+                disabled={generating}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">Any intelligence (optional)</option>
+                {intelligences.map(intel => (
+                  <option key={intel.intelligence_id} value={intel.intelligence_id}>
+                    {intel.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Skill */}
-          <div>
-            <label htmlFor="skill" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Skill</label>
-            <select
-              id="skill"
-              value={selectedSkillId}
-              onChange={handleSkillChange}
-              disabled={generating || !selectedIntelligenceId}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">
-                {selectedIntelligenceId ? "Any skill (optional)" : "Select intelligence first"}
-              </option>
-              {filteredSkills.map(sk => (
-                <option key={sk.skill_id} value={sk.skill_id}>
-                  {sk.name}
-                </option>
-              ))}
-            </select>
-          </div>
+            {/* Skill */}
+            <div>
+              <label htmlFor="skill" className="block text-xs font-medium text-slate-500 mb-1">Skill</label>
+              <select
+                id="skill"
+                value={selectedSkillId}
+                onChange={handleSkillChange}
+                disabled={generating}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">Any skill (optional)</option>
+                {filteredSkills.map(sk => (
+                  <option key={sk.skill_id} value={sk.skill_id}>
+                    {sk.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Sub Skill */}
-          <div>
-            <label htmlFor="sub-skill" className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Sub Skill</label>
-            <select
-              id="sub-skill"
-              value={selectedSubSkillId}
-              onChange={e => setSelectedSubSkillId(e.target.value)}
-              disabled={generating || !selectedSkillId}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              <option value="">
-                {selectedSkillId ? "Any sub skill (optional)" : "Select skill first"}
-              </option>
-              {filteredSubSkills.map(ssk => (
-                <option key={ssk.sub_skill_id} value={ssk.sub_skill_id}>
-                  {ssk.name}
-                </option>
-              ))}
-            </select>
+            {/* Sub Skill */}
+            <div>
+              <label htmlFor="sub-skill" className="block text-xs font-medium text-slate-500 mb-1">Sub Skill</label>
+              <select
+                id="sub-skill"
+                value={selectedSubSkillId}
+                onChange={handleSubSkillChange}
+                disabled={generating}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
+              >
+                <option value="">Any sub skill (optional)</option>
+                {filteredSubSkills.map(ssk => (
+                  <option key={ssk.sub_skill_id} value={ssk.sub_skill_id}>
+                    {ssk.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -554,11 +609,85 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                       <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200 font-medium">
                         Potential: {c.activity_potential}
                       </span>
-                      {selectedSkillName && (
-                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200 font-medium">
-                          Skill: {selectedSkillName}{selectedSubSkillName ? ` · ${selectedSubSkillName}` : ""}
-                        </span>
-                      )}
+                    </div>
+
+                    {/* Mapping Details: AI-Suggested vs User-Selected */}
+                    <div className="mt-4 pt-3.5 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      {/* User-Selected Parameters */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
+                        <div className="flex items-center gap-1.5 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
+                          <UserCheck className="w-3.5 h-3.5 text-slate-500" />
+                          <span>User-Selected Parameters</span>
+                        </div>
+                        <div className="space-y-1.5 text-slate-600">
+                          <div>
+                            <span className="text-slate-400 font-medium mr-1.5">User-Selected Intelligence:</span>
+                            <span className="font-semibold text-slate-800">
+                              {c.user_selected_intelligence || selectedIntelligenceName || "None (Open Discovery)"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium mr-1.5">User-Selected Skills:</span>
+                            <span className="font-semibold text-slate-800">
+                              {c.user_selected_skills && c.user_selected_skills.length > 0
+                                ? c.user_selected_skills.join(", ")
+                                : (selectedSkillName || "None")}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium mr-1.5">User-Selected Sub-skills:</span>
+                            <span className="font-semibold text-slate-800">
+                              {c.user_selected_sub_skills && c.user_selected_sub_skills.length > 0
+                                ? c.user_selected_sub_skills.join(", ")
+                                : (selectedSubSkillName || "None")}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI-Suggested Mappings */}
+                      <div className="rounded-xl border border-indigo-100 bg-[#FAF9FF] p-3.5 space-y-2">
+                        <div className="flex items-center gap-1.5 text-[#5B50F5] font-bold uppercase tracking-wider text-[11px]">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>AI-Suggested Mappings</span>
+                        </div>
+                        <div className="space-y-1.5 text-slate-600">
+                          <div>
+                            <span className="text-slate-400 font-medium mr-1.5">Suggested Intelligence:</span>
+                            <span className="font-semibold text-[#5B50F5]">
+                              {c.suggested_intelligence || "Cognitive / Multidisciplinary"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium mr-1.5">Suggested Skills:</span>
+                            {c.suggested_skills && c.suggested_skills.length > 0 ? (
+                              <div className="inline-flex flex-wrap gap-1 mt-0.5">
+                                {c.suggested_skills.map((s, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-[#5B50F5] font-medium text-[11px]">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">None suggested</span>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-slate-400 font-medium mr-1.5">Suggested Sub-skills:</span>
+                            {c.suggested_sub_skills && c.suggested_sub_skills.length > 0 ? (
+                              <div className="inline-flex flex-wrap gap-1 mt-0.5">
+                                {c.suggested_sub_skills.map((ss, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 rounded-md bg-white border border-violet-200 text-violet-700 font-medium text-[11px]">
+                                    {ss}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">None suggested</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                     {err && (
                       <div className="mt-3 p-2 bg-red-100 text-red-700 text-xs rounded-lg border border-red-200 whitespace-pre-wrap font-mono">

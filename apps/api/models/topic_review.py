@@ -17,6 +17,7 @@ class TopicDetailResponse(BaseModel):
     topic_family_name: str
     skills: List[Dict[str, Any]]
     keywords: List[str]
+    mappings: Optional[Dict[str, Any]] = None
 
 class TopicListResponse(BaseModel):
     topics: List[TopicDetailResponse]

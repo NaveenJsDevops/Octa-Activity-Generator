@@ -23,14 +23,19 @@ def get_prompt_registry() -> PromptRegistry:
     registry.register_prompt(PromptTemplate(
         prompt_name="topic_discovery",
         version="v1.1",
-        system_prompt="You are an expert curriculum designer for Octa Kids. Generate engaging, unique activity topics.",
+        system_prompt="You are an expert curriculum designer for Octa Kids. Generate engaging, unique activity topics with precise intelligence and skills mapping.",
         user_prompt_template=(
-            "Generate {requested_count} topic candidates for age {age_min} to {age_max} (Class: {target_class}). "
-            "Topic family: {topic_family_name}. Context: {country_context}. "
-            "Use these keywords for inspiration: {keyword_context}. "
-            "Web Research Info to guide topics:\n{web_research_context}\n"
-            "Ensure topics are highly engaging and suitable for the age group. "
-            "IMPORTANT: 'activity_potential' MUST be exactly one of: HIGH, MEDIUM, or LOW. "
+            "Generate {requested_count} topic candidates for age {age_min} to {age_max} (Class: {target_class}).\n"
+            "Topic family: {topic_family_name}. Context: {country_context}.\n"
+            "{educational_focus}\n"
+            "Use these keywords for inspiration: {keyword_context}.\n"
+            "Web Research Info to guide topics:\n{web_research_context}\n\n"
+            "Ensure topics are highly engaging, educational, and suitable for the age group.\n"
+            "For each topic candidate, include:\n"
+            "1. 'suggested_intelligence': The primary intelligence category this topic develops (e.g. Artistic, Arithmetic, Communication, Cognitive, Creative, Emotional, Environmental, Social).\n"
+            "2. 'suggested_skills': A list of 1 to 3 key skills cultivated by this topic.\n"
+            "3. 'suggested_sub_skills': A list of 1 to 3 specific sub-skills practiced in this topic.\n"
+            "IMPORTANT: 'activity_potential' MUST be exactly one of: HIGH, MEDIUM, or LOW.\n"
             "Do NOT include explanations, sentences, or natural language in 'activity_potential'."
         ),
         status="ACTIVE",

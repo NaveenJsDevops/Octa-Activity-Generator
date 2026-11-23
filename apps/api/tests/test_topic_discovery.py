@@ -316,3 +316,114 @@ def test_topic_discovery_with_intelligence_and_skills(service, orchestrator, rep
     assert matching_skills[0]["skill_id"] == "SK-001"
     assert matching_skills[0]["sub_skill_id"] == "SS-001"
     assert matching_skills[0]["relationship_type"] == "PRIMARY"
+
+def test_topic_discovery_user_selected_and_ai_suggested_mappings_distinction(service, orchestrator, repo):
+    request = TopicDiscoveryRequest(
+        age_min=8,
+        age_max=10,
+        keywords=["robotics"],
+        intelligence_id="INT-001",
+        skill_id="SK-001",
+        sub_skill_id="SS-001",
+        requested_count=1
+    )
+
+    orchestrator.generate_structured.return_value = TopicDiscoveryOutput(
+        topics=[
+            TopicCandidate(
+                topic="Automated Weather Station",
+                short_description="Build a miniature weather monitor.",
+                full_description="Students assemble sensors and read atmospheric data.",
+                activity_potential="HIGH",
+                age_suitability="8-10",
+                keywords=["weather", "sensors"],
+                suggested_intelligence="Environmental",
+                suggested_skills=["Data Analysis", "Eco-awareness"],
+                suggested_sub_skills=["Sensor Calibration"]
+            )
+        ]
+    )
+
+    repo.append_record("GenerationRuns", {
+        "generation_id": "gen-mapping-test",
+        "generation_type": "TOPIC_DISCOVERY",
+        "model": "gemini",
+        "prompt_version": "v1.1",
+        "started_at": datetime.now(),
+        "status": "COMPLETED"
+    })
+
+    result = service.discover_topics(request)
+    session_id = result["session_id"]
+    candidate = result["candidates"][0]
+
+    # Verify user selections are tracked separately on candidate
+    assert candidate["user_selected_skills"] == ["Observation"]
+    assert candidate["user_selected_sub_skills"] == ["Visual Analysis"]
+    assert candidate["suggested_intelligence"] == "Environmental"
+    assert candidate["suggested_skills"] == ["Data Analysis", "Eco-awareness"]
+    assert candidate["suggested_sub_skills"] == ["Sensor Calibration"]
+
+    # Save candidate
+    keep_result = service.keep_candidate(session_id, 0)
+    assert keep_result["status"] == "success"
+    topic_data = keep_result["topic"]
+
+    # Verify persisted Topic retains both mappings separately
+    assert topic_data["user_selected_skills"] == ["Observation"]
+    assert topic_data["user_selected_sub_skills"] == ["Visual Analysis"]
+    assert topic_data["suggested_intelligence"] == "Environmental"
+    assert topic_data["suggested_skills"] == ["Data Analysis", "Eco-awareness"]
+    assert topic_data["suggested_sub_skills"] == ["Sensor Calibration"]
+
+def test_topic_discovery_without_user_selection_shows_ai_suggested(service, orchestrator, repo):
+    request = TopicDiscoveryRequest(
+        age_min=6,
+        age_max=8,
+        keywords=["origami"],
+        requested_count=1
+    )
+
+    orchestrator.generate_structured.return_value = TopicDiscoveryOutput(
+        topics=[
+            TopicCandidate(
+                topic="Origami Geometry",
+                short_description="Fold paper into geometric polyhedra.",
+                full_description="Explore geometry through hands-on paper folding.",
+                activity_potential="HIGH",
+                age_suitability="6-8",
+                keywords=["origami", "geometry"],
+                suggested_intelligence="Artistic",
+                suggested_skills=["Craftsmanship", "Spatial Reasoning"],
+                suggested_sub_skills=["Pattern Recognition"]
+            )
+        ]
+    )
+
+    repo.append_record("GenerationRuns", {
+        "generation_id": "gen-open-test",
+        "generation_type": "TOPIC_DISCOVERY",
+        "model": "gemini",
+        "prompt_version": "v1.1",
+        "started_at": datetime.now(),
+        "status": "COMPLETED"
+    })
+
+    result = service.discover_topics(request)
+    session_id = result["session_id"]
+    candidate = result["candidates"][0]
+
+    # User selections should be empty
+    assert candidate["user_selected_intelligence"] is None
+    assert candidate["user_selected_skills"] == []
+    assert candidate["user_selected_sub_skills"] == []
+
+    # AI suggested should be present
+    assert candidate["suggested_intelligence"] == "Artistic"
+    assert "Craftsmanship" in candidate["suggested_skills"]
+
+    # Save and verify persistence
+    keep_result = service.keep_candidate(session_id, 0)
+    topic_data = keep_result["topic"]
+    assert topic_data["user_selected_intelligence"] is None
+    assert topic_data["suggested_intelligence"] == "Artistic"
