@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Optional, Type, TypeVar
 from pydantic import BaseModel
 import openai
@@ -12,6 +13,14 @@ from apps.api.services.ai.exceptions import (
 )
 
 T = TypeVar('T', bound=BaseModel)
+
+def _clean_markdown_fence(content: str) -> str:
+    """Robustly strips markdown JSON code fences and extraneous whitespace."""
+    if not content:
+        return "{}"
+    cleaned = re.sub(r'^\s*```(?:json)?\s*', '', content.strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s*```\s*$', '', cleaned)
+    return cleaned.strip() or "{}"
 
 class OpenAIProvider(AIProvider):
     def __init__(self):
@@ -103,8 +112,10 @@ class OpenAIProvider(AIProvider):
                 response_format={"type": "json_object"}
             )
             
+            raw_content = response.choices[0].message.content or "{}"
+            content = _clean_markdown_fence(raw_content)
             return AIResponse(
-                content=response.choices[0].message.content or "{}",
+                content=content,
                 input_tokens=response.usage.prompt_tokens if response.usage else None,
                 output_tokens=response.usage.completion_tokens if response.usage else None,
                 duration_ms=None

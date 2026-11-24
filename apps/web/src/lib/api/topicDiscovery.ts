@@ -84,6 +84,29 @@ export async function keepCandidate(sessionId: string, index: number): Promise<a
   return await res.json();
 }
 
+export async function editCandidate(
+  sessionId: string,
+  index: number,
+  updates: { topic?: string; short_description?: string; full_description?: string }
+): Promise<any> {
+  const res = await fetch(`${API_BASE_URL}/api/topics/discovery/${sessionId}/candidate/${index}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    let errorMsg = "Failed to update candidate";
+    try {
+      const errData = await res.json();
+      errorMsg = errData.detail || errorMsg;
+    } catch (e) {}
+    throw new Error(errorMsg);
+  }
+  return await res.json();
+}
+
 export async function rejectCandidate(sessionId: string, index: number): Promise<any> {
   const res = await fetch(`${API_BASE_URL}/api/topics/discovery/${sessionId}/reject/${index}`, {
     method: "POST"

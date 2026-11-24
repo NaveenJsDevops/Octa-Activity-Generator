@@ -144,3 +144,61 @@ def test_timeout_handling_and_retry(orchestrator, repo):
     assert orchestrator.provider.call_count == 3
     logs = repo.read_sheet("GenerationRuns")
     assert "timeout" in logs[0]["error"].lower()
+
+def test_markdown_fence_cleaning():
+    from apps.api.services.ai.providers.gemini_provider import _clean_markdown_fence
+    
+    # 1. Plain json
+    assert _clean_markdown_fence('{"key": "value"}') == '{"key": "value"}'
+    
+    # 2. Markdown with json tag
+    wrapped = "```json\n{\"key\": \"value\"}\n```"
+    assert _clean_markdown_fence(wrapped) == '{"key": "value"}'
+    
+    # 3. Leading/trailing whitespace and newlines
+    whitespace_wrapped = "\n  ```json\n  {\"key\": \"value\"}\n  ``` \n"
+    assert _clean_markdown_fence(whitespace_wrapped) == '{"key": "value"}'
+    
+    # 4. Empty or None
+    assert _clean_markdown_fence("") == "{}"
+
+def test_provider_fallback_on_rate_limit(orchestrator, repo):
+    """Simulate primary provider rate limit (429) falling back to a secondary provider."""
+    # Primary raises 429
+    orchestrator.provider.error_to_raise = AIProviderError("429 Too Many Requests: quota exceeded")
+    
+    # Configure mock fallback provider
+    fallback_provider = MockAIProvider()
+    fallback_provider.response_content = '{"title": "Fallback Astronomy", "score": 95}'
+    
+    # Inject fallback provider
+    orchestrator._get_fallback_providers = lambda: [("fallback_secondary", fallback_provider)]
+    
+    result = orchestrator.generate_structured(
+        generation_type="TEST_FALLBACK",
+        prompt="Tell me about stars",
+        schema_model=MockSchema,
+    )
+    
+    assert isinstance(result, MockSchema)
+    assert result.title == "Fallback Astronomy"
+    assert result.score == 95
+    assert fallback_provider.call_count == 1
+
+def test_discovery_session_store_ttl_and_capacity():
+    from datetime import datetime, timedelta
+    from apps.api.services.topic_discovery.session_store import SessionStore, MAX_SESSIONS
+    
+    # 1. Create session
+    sess = SessionStore.create_session("req", ["cand1"], "gen-1")
+    assert SessionStore.get_session(sess.session_id) is not None
+    
+    # 2. Expire session by setting created_at > 24 hours ago
+    sess.created_at = datetime.now() - timedelta(hours=25)
+    assert SessionStore.get_session(sess.session_id) is None
+    
+    # 3. Capacity pruning
+    for i in range(MAX_SESSIONS + 10):
+        SessionStore.create_session("req", [f"cand-{i}"], f"gen-{i}")
+    
+    assert len(SessionStore._sessions) <= MAX_SESSIONS

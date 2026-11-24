@@ -1,6 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator
 from apps.api.models.domain import Activity, MainActivity, PostActivity, PreActivity
+
+class ActivitySectionRegenerateRequest(BaseModel):
+    section: Literal["pre_activity", "main_activity", "post_activity"]
 
 class ActivityIdeationRequest(BaseModel):
     topic_id: str
@@ -83,6 +86,16 @@ class ActivityConceptResponse(BaseModel):
     pre_activity: Optional[PreActivity] = None
     main_activity: Optional[MainActivity] = None
     post_activity: Optional[PostActivity] = None
+    topic_family_name: Optional[str] = None
+    country_context: Optional[str] = None
+    keywords: List[str] = Field(default_factory=list)
+    mappings: Optional[Dict[str, Any]] = None
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: Optional[List[str]] = Field(default_factory=list)
+    user_selected_sub_skills: Optional[List[str]] = Field(default_factory=list)
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: Optional[List[str]] = Field(default_factory=list)
+    suggested_sub_skills: Optional[List[str]] = Field(default_factory=list)
 
 class ActivityIdeationResult(BaseModel):
     topic_id: str
@@ -101,6 +114,16 @@ class ActivityConceptEditRequest(BaseModel):
     pre_activity: Optional[PreActivity] = None
     main_activity: Optional[MainActivity] = None
     post_activity: Optional[PostActivity] = None
+    topic_family_name: Optional[str] = None
+    country_context: Optional[str] = None
+    keywords: List[str] = Field(default_factory=list)
+    mappings: Optional[Dict[str, Any]] = None
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: Optional[List[str]] = Field(default_factory=list)
+    user_selected_sub_skills: Optional[List[str]] = Field(default_factory=list)
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: Optional[List[str]] = Field(default_factory=list)
+    suggested_sub_skills: Optional[List[str]] = Field(default_factory=list)
     learning_objective: Optional[str] = None
     materials: Optional[List[str]] = None
     assessment_criteria: Optional[str] = None
@@ -111,4 +134,8 @@ class ActivityConceptEditRequest(BaseModel):
 class ActivityLibraryItem(BaseModel):
     activity: Activity
     topic_title: str
+    topic_family_name: Optional[str] = None
+    country_context: Optional[str] = None
+    keywords: List[str] = Field(default_factory=list)
+    mappings: Optional[Dict[str, Any]] = None
     skills: List[dict] = Field(default_factory=list)

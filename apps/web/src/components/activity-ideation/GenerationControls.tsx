@@ -5,10 +5,11 @@ interface Props {
   onGenerate: (count: number) => Promise<void>;
   isGenerating: boolean;
   isDisabled?: boolean;
+  defaultCount?: number;
 }
 
-export function GenerationControls({ onGenerate, isGenerating, isDisabled = false }: Props) {
-  const [count, setCount] = useState(5);
+export function GenerationControls({ onGenerate, isGenerating, isDisabled = false, defaultCount = 5 }: Props) {
+  const [count, setCount] = useState(defaultCount);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">

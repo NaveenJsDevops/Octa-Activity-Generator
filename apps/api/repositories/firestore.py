@@ -385,16 +385,17 @@ class FirestoreRepository:
                 staged.setdefault(sheet_name, []).append(validated)
                 validated_entries.append((sheet_name, validated))
 
-            # Commit all validated entries
+            # If Cloud Firestore is connected and not in isolated test, commit to Firestore first
+            if not self._is_isolated_test and firestore_manager.is_available:
+                try:
+                    firestore_manager.save_records_batch(validated_entries, async_mode=False)
+                except Exception as e:
+                    logger.error(f"Failed to batch commit to Firestore: {e}")
+                    raise RuntimeError(f"Cloud Firestore persistence failed, transaction aborted: {e}") from e
+
+            # Once Firestore succeeds (or in test mode), commit all validated entries to in-memory storage
             for sheet_name, record in validated_entries:
                 self._storage.setdefault(sheet_name, []).append(copy.deepcopy(record))
-
-        # Commit to Firestore if not an isolated test
-        if not self._is_isolated_test and firestore_manager.is_available:
-            try:
-                firestore_manager.save_records_batch(validated_entries)
-            except Exception as e:
-                logger.error(f"Failed to batch commit to Firestore: {e}")
 
         return [record for _, record in validated_entries]
 

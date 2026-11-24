@@ -149,6 +149,11 @@ def test_draft_topic_can_be_approved_directly_and_used_for_activity_generation(c
     assert topic_detail.status_code == 200
     assert topic_detail.json()["topic"]["status"] == "APPROVED"
 
+    # Verify idempotency
+    response2 = client.post("/api/topics/TOP-DRAFT-APPROVAL/approve")
+    assert response2.status_code == 200
+    assert response2.json()["new_status"] == "APPROVED"
+
 
 def test_reject_topic(client):
     # DRAFT -> REJECTED is not allowed, must be from DRAFT or REVIEW. Wait, DRAFT -> REJECTED IS allowed.

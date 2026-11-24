@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
 from apps.api.models.activity_ideation import (
-    ActivityConceptEditRequest, ActivityIdeationRequest, ActivityIdeationResult, ActivityConceptResponse
+    ActivityConceptEditRequest,
+    ActivityIdeationRequest,
+    ActivityIdeationResult,
+    ActivityConceptResponse,
+    ActivitySectionRegenerateRequest,
 )
 from apps.api.services.activity_ideation.service import ActivityIdeationService
 from apps.api.services.ai.exceptions import (
@@ -97,6 +101,29 @@ def regenerate_concept(
 ):
     try:
         return service.regenerate_concept(session_id, concept_id)
+    except AIConfigurationError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except AIRetryExhaustedError as e:
+        message = str(e)
+        lowered = message.lower()
+        if "429" in lowered or "quota" in lowered or "rate limit" in lowered:
+            raise HTTPException(status_code=429, detail="AI provider quota or rate limit reached")
+        raise HTTPException(status_code=502, detail=message)
+    except AIProviderError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+@router.post(
+    "/sessions/{session_id}/concepts/{concept_id}/regenerate-section",
+    response_model=ActivityConceptResponse,
+)
+def regenerate_concept_section(
+    session_id: str,
+    concept_id: str,
+    request: ActivitySectionRegenerateRequest,
+    service: ActivityIdeationService = Depends(get_ideation_service),
+):
+    try:
+        return service.regenerate_concept_section(session_id, concept_id, request.section)
     except AIConfigurationError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except AIRetryExhaustedError as e:

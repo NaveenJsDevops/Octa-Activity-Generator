@@ -4,22 +4,38 @@
 import { API_BASE_URL } from "@/lib/apiBase";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Search,
   XCircle,
   AlertCircle,
-  FileText,
-  ArrowRight,
-  ChevronDown,
   RefreshCw,
   CalendarClock,
-  Calendar,
   ArrowUpDown,
   Sparkles,
+  Loader2,
+  Compass,
+  Tag,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  X,
+  Plus,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/dateTime";
+import {
+  fetchMasterData,
+  DEFAULT_INTELLIGENCES,
+  DEFAULT_SKILLS,
+  DEFAULT_SUBSKILLS,
+  MasterIntelligence,
+  MasterSkill,
+  MasterSubSkill,
+} from "@/lib/apiCache";
 
-// Deterministic color mapping for topic families/types
+const TOPIC_STORAGE_KEY = "octa_topic_library_filters_v1";
+const PAGE_SIZE = 10;
+
 const TOPIC_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   "Space Exploration":    { bg: "#EEF0FF", text: "#5B50F5", border: "#d4d0fc" },
   "Earth & Environment":  { bg: "#ECFDF5", text: "#059669", border: "#a7f3d0" },
@@ -46,22 +62,11 @@ const STATUS_BADGES: Record<string, { label: string; bg: string; text: string; b
   REJECTED: { label: "Rejected", bg: "#FEF2F2", text: "#991B1B", border: "#FECACA" },
 };
 
-const INTELLIGENCE_OPTIONS = [
-  "Artistic",
-  "Arithmetic",
-  "Communication",
-  "Cognitive",
-  "Creative",
-  "Emotional",
-  "Environmental",
-  "Social",
-];
-
 function TopicTypeBadge({ label }: { label: string }) {
   const style = TOPIC_TYPE_COLORS[label] || TOPIC_TYPE_COLORS["default"];
   return (
     <span
-      className="px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+      className="px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-2xs"
       style={{ background: style.bg, color: style.text, border: `1px solid ${style.border}` }}
     >
       {label}
@@ -78,7 +83,7 @@ function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold uppercase tracking-wider"
+      className="px-2 py-0.5 rounded-md text-[11px] font-semibold uppercase tracking-wider shadow-2xs"
       style={{ background: badge.bg, color: badge.text, border: `1px solid ${badge.border}` }}
     >
       {badge.label}
@@ -109,20 +114,149 @@ function parseRecordDate(value?: any): Date | null {
 }
 
 export default function TopicsPage() {
+  const router = useRouter();
   const [topics, setTopics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("");
+  // Master Data
+  const [intelligences, setIntelligences] = useState<MasterIntelligence[]>(DEFAULT_INTELLIGENCES);
+  const [skills, setSkills] = useState<MasterSkill[]>(DEFAULT_SKILLS);
+  const [subSkills, setSubSkills] = useState<MasterSubSkill[]>(DEFAULT_SUBSKILLS);
+
+  // Search & Filter States
+  const [rawSearchQuery, setRawSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [intelligenceFilter, setIntelligenceFilter] = useState("ALL");
+  const [skillFilter, setSkillFilter] = useState("ALL");
+  const [subSkillFilter, setSubSkillFilter] = useState("ALL");
   const [ageFilter, setAgeFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sortBy, setSortBy] = useState<"NEWEST" | "OLDEST" | "TITLE_AZ" | "TITLE_ZA">("NEWEST");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Restore state from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(TOPIC_STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (typeof data.rawSearchQuery === "string") {
+          setRawSearchQuery(data.rawSearchQuery);
+          setDebouncedSearchQuery(data.rawSearchQuery);
+        }
+        if (data.typeFilter) setTypeFilter(data.typeFilter);
+        if (data.statusFilter) setStatusFilter(data.statusFilter);
+        if (data.intelligenceFilter) setIntelligenceFilter(data.intelligenceFilter);
+        if (data.skillFilter) setSkillFilter(data.skillFilter);
+        if (data.subSkillFilter) setSubSkillFilter(data.subSkillFilter);
+        if (data.ageFilter) setAgeFilter(data.ageFilter);
+        if (data.datePreset) setDatePreset(data.datePreset);
+        if (data.startDate) setStartDate(data.startDate);
+        if (data.endDate) setEndDate(data.endDate);
+        if (data.sortBy) setSortBy(data.sortBy);
+        if (typeof data.currentPage === "number") setCurrentPage(data.currentPage);
+      }
+    } catch {
+      // Fallback to defaults
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  // Persist state to sessionStorage
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      const stateToSave = {
+        rawSearchQuery,
+        typeFilter,
+        statusFilter,
+        intelligenceFilter,
+        skillFilter,
+        subSkillFilter,
+        ageFilter,
+        datePreset,
+        startDate,
+        endDate,
+        sortBy,
+        currentPage,
+      };
+      sessionStorage.setItem(TOPIC_STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [
+    isHydrated,
+    rawSearchQuery,
+    typeFilter,
+    statusFilter,
+    intelligenceFilter,
+    skillFilter,
+    subSkillFilter,
+    ageFilter,
+    datePreset,
+    startDate,
+    endDate,
+    sortBy,
+    currentPage,
+  ]);
+
+  // Load master data
+  useEffect(() => {
+    fetchMasterData()
+      .then((data) => {
+        if (data.intelligences?.length) setIntelligences(data.intelligences);
+        if (data.skills?.length) setSkills(data.skills);
+        if (data.subSkills?.length) setSubSkills(data.subSkills);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Search input debounce (250ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(rawSearchQuery);
+      setCurrentPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [rawSearchQuery]);
+
+  // Reset pagination on filter change
+  const handleFilterChange = (setter: (val: any) => void, value: any) => {
+    setter(value);
+    setCurrentPage(1);
+  };
+
+  const handleApproveAndGenerate = async (topicId: string) => {
+    setActionLoadingId(topicId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}/approve`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to approve topic");
+      }
+      setTopics((prev) =>
+        prev.map((item) =>
+          item.topic?.topic_id === topicId
+            ? { ...item, topic: { ...item.topic, status: "APPROVED" } }
+            : item
+        )
+      );
+      router.push(`/activities?topic_id=${topicId}`);
+    } catch (err: any) {
+      alert(err.message || "Approval failed");
+      setActionLoadingId(null);
+    }
+  };
 
   const fetchTopics = useCallback(async () => {
     setLoading(true);
@@ -146,19 +280,39 @@ export default function TopicsPage() {
     fetchTopics();
   }, [fetchTopics]);
 
-  // Extract unique topic family names for the filter dropdown
+  // Extract unique topic family names
   const availableTypes = useMemo(() => {
     const set = new Set<string>();
-    topics.forEach(t => {
+    topics.forEach((t) => {
       const name = t.topic_family_name || t.topic?.topic_type;
       if (name && name !== "Unknown") set.add(name);
     });
     return Array.from(set).sort();
   }, [topics]);
 
-  // Client-side filtering and sorting with latest record at top by default
+  // Filter skills based on selected intelligence
+  const filteredSkillsOptions = useMemo(() => {
+    if (intelligenceFilter === "ALL") return skills;
+    const matchIntel = intelligences.find(
+      (i) => i.name.toLowerCase() === intelligenceFilter.toLowerCase()
+    );
+    if (!matchIntel) return skills;
+    return skills.filter((s) => s.intelligence_id === matchIntel.intelligence_id);
+  }, [skills, intelligences, intelligenceFilter]);
+
+  // Filter subskills based on selected skill
+  const filteredSubSkillsOptions = useMemo(() => {
+    if (skillFilter === "ALL") return subSkills;
+    const matchSkill = skills.find(
+      (s) => s.name.toLowerCase() === skillFilter.toLowerCase()
+    );
+    if (!matchSkill) return subSkills;
+    return subSkills.filter((ss) => ss.skill_id === matchSkill.skill_id);
+  }, [subSkills, skills, skillFilter]);
+
+  // Client-side filtering and sorting
   const filteredTopics = useMemo(() => {
-    const filtered = topics.filter(t => {
+    const filtered = topics.filter((t) => {
       // 1. Status filter
       if (statusFilter !== "ALL" && t.topic?.status?.toUpperCase() !== statusFilter) {
         return false;
@@ -173,15 +327,45 @@ export default function TopicsPage() {
       // 3. Intelligence filter
       if (intelligenceFilter !== "ALL") {
         const target = intelligenceFilter.toLowerCase();
-        const matchesIntel = (t.skills || []).some((s: any) => {
+        const uIntel = (t.topic?.user_selected_intelligence || "").toLowerCase();
+        const sIntel = (t.topic?.suggested_intelligence || "").toLowerCase();
+        const mappedIntel = (t.skills || []).some((s: any) => {
           const iName = (s.intelligence_name || "").toLowerCase();
           const iId = (s.intelligence_id || "").toLowerCase();
           return iName.includes(target) || iId.includes(target);
         });
-        if (!matchesIntel) return false;
+        if (!uIntel.includes(target) && !sIntel.includes(target) && !mappedIntel) {
+          return false;
+        }
       }
 
-      // 4. Age filter
+      // 4. Skill filter
+      if (skillFilter !== "ALL") {
+        const targetSkill = skillFilter.toLowerCase();
+        const uSkills = (t.topic?.user_selected_skills || []).map((s: string) => s.toLowerCase());
+        const sSkills = (t.topic?.suggested_skills || []).map((s: string) => s.toLowerCase());
+        const mappedSkills = (t.skills || []).map((s: any) => (s.skill_name || "").toLowerCase());
+        const matchesSkill =
+          uSkills.includes(targetSkill) ||
+          sSkills.includes(targetSkill) ||
+          mappedSkills.includes(targetSkill);
+        if (!matchesSkill) return false;
+      }
+
+      // 5. Sub-skill filter
+      if (subSkillFilter !== "ALL") {
+        const targetSub = subSkillFilter.toLowerCase();
+        const uSub = (t.topic?.user_selected_sub_skills || []).map((s: string) => s.toLowerCase());
+        const sSub = (t.topic?.suggested_sub_skills || []).map((s: string) => s.toLowerCase());
+        const mappedSub = (t.skills || []).map((s: any) => (s.sub_skill_name || "").toLowerCase());
+        const matchesSub =
+          uSub.includes(targetSub) ||
+          sSub.includes(targetSub) ||
+          mappedSub.includes(targetSub);
+        if (!matchesSub) return false;
+      }
+
+      // 6. Age filter
       if (ageFilter !== "ALL") {
         const min = t.topic?.age_min ?? 0;
         const max = t.topic?.age_max ?? 99;
@@ -191,7 +375,7 @@ export default function TopicsPage() {
         if (ageFilter === "14+" && max < 14) return false;
       }
 
-      // 5. Date filter
+      // 7. Date filter
       if (datePreset !== "ALL") {
         const recordDate = parseRecordDate(t.topic?.created_at || t.topic?.updated_at);
         if (!recordDate) return false;
@@ -220,9 +404,9 @@ export default function TopicsPage() {
         }
       }
 
-      // 6. Search query (title, description, hook, keywords, ID, skills)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
+      // 8. Search query
+      if (debouncedSearchQuery.trim()) {
+        const q = debouncedSearchQuery.toLowerCase().trim();
         const titleMatch = (t.topic?.topic || "").toLowerCase().includes(q);
         const descMatch =
           (t.topic?.short_description || "").toLowerCase().includes(q) ||
@@ -231,13 +415,16 @@ export default function TopicsPage() {
         const idMatch = (t.topic?.topic_id || "").toLowerCase().includes(q);
         const keywordMatch = (t.keywords || []).some((k: string) => k.toLowerCase().includes(q));
         const familyMatch = (t.topic_family_name || "").toLowerCase().includes(q);
+        const intelMatch =
+          (t.topic?.user_selected_intelligence || "").toLowerCase().includes(q) ||
+          (t.topic?.suggested_intelligence || "").toLowerCase().includes(q);
         const skillMatch = (t.skills || []).some((s: any) =>
           `${s.skill_name || ""} ${s.sub_skill_name || ""} ${s.intelligence_name || ""}`
             .toLowerCase()
             .includes(q)
         );
 
-        if (!titleMatch && !descMatch && !idMatch && !keywordMatch && !familyMatch && !skillMatch) {
+        if (!titleMatch && !descMatch && !idMatch && !keywordMatch && !familyMatch && !intelMatch && !skillMatch) {
           return false;
         }
       }
@@ -245,7 +432,7 @@ export default function TopicsPage() {
       return true;
     });
 
-    // 7. Sort Order (Default: NEWEST on top)
+    // Sort Order
     filtered.sort((a, b) => {
       if (sortBy === "NEWEST") {
         const dtA = parseRecordDate(a.topic?.created_at)?.getTime() || 0;
@@ -260,10 +447,14 @@ export default function TopicsPage() {
         return (a.topic?.topic_id || "").localeCompare(b.topic?.topic_id || "");
       }
       if (sortBy === "TITLE_AZ") {
-        return (a.topic?.topic || "").localeCompare(b.topic?.topic || "");
+        const cmp = (a.topic?.topic || "").localeCompare(b.topic?.topic || "");
+        if (cmp !== 0) return cmp;
+        return (a.topic?.topic_id || "").localeCompare(b.topic?.topic_id || "");
       }
       if (sortBy === "TITLE_ZA") {
-        return (b.topic?.topic || "").localeCompare(a.topic?.topic || "");
+        const cmp = (b.topic?.topic || "").localeCompare(a.topic?.topic || "");
+        if (cmp !== 0) return cmp;
+        return (b.topic?.topic_id || "").localeCompare(a.topic?.topic_id || "");
       }
       return 0;
     });
@@ -274,35 +465,53 @@ export default function TopicsPage() {
     statusFilter,
     typeFilter,
     intelligenceFilter,
+    skillFilter,
+    subSkillFilter,
     ageFilter,
     datePreset,
     startDate,
     endDate,
-    searchQuery,
+    debouncedSearchQuery,
     sortBy,
   ]);
+
+  // Pagination calculation
+  const totalItems = filteredTopics.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const paginatedTopics = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredTopics.slice(start, start + PAGE_SIZE);
+  }, [filteredTopics, currentPage]);
 
   const hasActiveFilters =
     statusFilter !== "ALL" ||
     typeFilter !== "ALL" ||
     intelligenceFilter !== "ALL" ||
+    skillFilter !== "ALL" ||
+    subSkillFilter !== "ALL" ||
     ageFilter !== "ALL" ||
     datePreset !== "ALL" ||
     startDate !== "" ||
     endDate !== "" ||
-    searchQuery.trim() !== "" ||
-    sortBy !== "NEWEST";
+    rawSearchQuery.trim() !== "";
 
   const clearFilters = () => {
     setStatusFilter("ALL");
     setTypeFilter("ALL");
     setIntelligenceFilter("ALL");
+    setSkillFilter("ALL");
+    setSubSkillFilter("ALL");
     setAgeFilter("ALL");
     setDatePreset("ALL");
     setStartDate("");
     setEndDate("");
-    setSearchQuery("");
+    setRawSearchQuery("");
+    setDebouncedSearchQuery("");
     setSortBy("NEWEST");
+    setCurrentPage(1);
+    try {
+      sessionStorage.removeItem(TOPIC_STORAGE_KEY);
+    } catch {}
   };
 
   return (
@@ -320,7 +529,7 @@ export default function TopicsPage() {
           <button
             onClick={fetchTopics}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs disabled:opacity-50"
             title="Reload topics from the database"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -330,157 +539,167 @@ export default function TopicsPage() {
             href="/topics/generate"
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#5B50F5] hover:bg-[#4740d4] text-white rounded-xl text-sm font-semibold transition-colors shadow-sm"
           >
-            + Discover New
+            <Plus className="w-4 h-4" />
+            Discover New
           </Link>
         </div>
       </div>
 
-      {/* Search & Filter Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3.5">
-        {/* Top Row: Search Input & Sort Selector */}
-        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-          {/* Real-time search */}
+      {/* Main Filter and Search Controls */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+        {/* Top search & sort row */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search topics by title, keywords, intelligence, skill, description..."
-              className="w-full pl-10 pr-10 py-2.5 bg-slate-50/70 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] transition-all"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              value={rawSearchQuery}
+              onChange={(e) => setRawSearchQuery(e.target.value)}
+              placeholder="Search topics by title, keywords, intelligence, skills, description..."
+              className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:bg-white transition-all"
             />
-            {searchQuery && (
+            {rawSearchQuery && (
               <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                aria-label="Clear search"
+                onClick={() => setRawSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                title="Clear search query"
               >
                 <XCircle className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Sort By Dropdown (Latest First is default) */}
+          {/* Sort By Dropdown */}
           <div className="relative shrink-0 min-w-[170px]">
             <ArrowUpDown className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
-              className="w-full appearance-none pl-9 pr-9 py-2.5 bg-slate-50/70 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] cursor-pointer transition-all"
               value={sortBy}
-              onChange={e => setSortBy(e.target.value as any)}
+              onChange={(e) => handleFilterChange(setSortBy, e.target.value as any)}
+              className="w-full appearance-none pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:bg-white cursor-pointer transition-all"
             >
               <option value="NEWEST">Latest First</option>
               <option value="OLDEST">Oldest First</option>
               <option value="TITLE_AZ">Title (A → Z)</option>
               <option value="TITLE_ZA">Title (Z → A)</option>
             </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
-        {/* Filter Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1 border-t border-slate-100">
-          {/* Topic Family Filter */}
-          <div className="relative">
-            <select
-              className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer transition-all"
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-            >
-              <option value="ALL">All Topic Types</option>
-              {availableTypes.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-
+        {/* Filter Dropdowns Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-2 border-t border-slate-100 text-xs">
           {/* Status Filter */}
-          <div className="relative">
-            <select
-              className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer transition-all"
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="REVIEW">In Review</option>
-              <option value="APPROVED">Approved</option>
-              <option value="SELECTED">Selected</option>
-              <option value="REJECTED">Rejected</option>
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => handleFilterChange(setStatusFilter, e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="DRAFT">Draft</option>
+            <option value="REVIEW">In Review</option>
+            <option value="APPROVED">Approved</option>
+            <option value="SELECTED">Selected</option>
+            <option value="REJECTED">Rejected</option>
+          </select>
+
+          {/* Topic Family Filter */}
+          <select
+            value={typeFilter}
+            onChange={(e) => handleFilterChange(setTypeFilter, e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate"
+          >
+            <option value="ALL">All Topic Types</option>
+            {availableTypes.map((family) => (
+              <option key={family} value={family}>
+                {family}
+              </option>
+            ))}
+          </select>
 
           {/* Intelligence Filter */}
-          <div className="relative">
-            <select
-              className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer transition-all"
-              value={intelligenceFilter}
-              onChange={e => setIntelligenceFilter(e.target.value)}
-            >
-              <option value="ALL">All Intelligences</option>
-              {INTELLIGENCE_OPTIONS.map(intel => (
-                <option key={intel} value={intel}>{intel}</option>
-              ))}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <select
+            value={intelligenceFilter}
+            onChange={(e) => {
+              handleFilterChange(setIntelligenceFilter, e.target.value);
+              setSkillFilter("ALL");
+              setSubSkillFilter("ALL");
+            }}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer"
+          >
+            <option value="ALL">All Intelligences</option>
+            {intelligences.map((intel) => (
+              <option key={intel.intelligence_id} value={intel.name}>
+                {intel.name}
+              </option>
+            ))}
+          </select>
 
-          {/* Age Suitability Filter */}
-          <div className="relative">
-            <select
-              className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer transition-all"
-              value={ageFilter}
-              onChange={e => setAgeFilter(e.target.value)}
-            >
-              <option value="ALL">All Ages</option>
-              <option value="5-7">5 - 7 Years (Early)</option>
-              <option value="8-10">8 - 10 Years (Primary)</option>
-              <option value="11-13">11 - 13 Years (Middle)</option>
-              <option value="14+">14+ Years (Secondary)</option>
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          {/* Skill Filter (Cascading) */}
+          <select
+            value={skillFilter}
+            onChange={(e) => {
+              handleFilterChange(setSkillFilter, e.target.value);
+              setSubSkillFilter("ALL");
+            }}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate"
+          >
+            <option value="ALL">All Skills</option>
+            {filteredSkillsOptions.map((sk) => (
+              <option key={sk.skill_id} value={sk.name}>
+                {sk.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Sub-Skill Filter (Cascading) */}
+          <select
+            value={subSkillFilter}
+            onChange={(e) => handleFilterChange(setSubSkillFilter, e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate"
+          >
+            <option value="ALL">All Sub-skills</option>
+            {filteredSubSkillsOptions.map((ssk) => (
+              <option key={ssk.sub_skill_id} value={ssk.name}>
+                {ssk.name}
+              </option>
+            ))}
+          </select>
 
           {/* Date Filter Preset */}
-          <div className="relative">
-            <select
-              className="w-full appearance-none pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer transition-all"
-              value={datePreset}
-              onChange={e => setDatePreset(e.target.value)}
-            >
-              <option value="ALL">All Dates</option>
-              <option value="TODAY">Today</option>
-              <option value="LAST_7_DAYS">Last 7 Days</option>
-              <option value="LAST_30_DAYS">Last 30 Days</option>
-              <option value="CUSTOM">Custom Range...</option>
-            </select>
-            <Calendar className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <select
+            value={datePreset}
+            onChange={(e) => handleFilterChange(setDatePreset, e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer"
+          >
+            <option value="ALL">All Dates</option>
+            <option value="TODAY">Today</option>
+            <option value="LAST_7_DAYS">Last 7 Days</option>
+            <option value="LAST_30_DAYS">Last 30 Days</option>
+            <option value="CUSTOM">Custom Range...</option>
+          </select>
         </div>
 
-        {/* Custom Date Range Row (Shown only when datePreset === 'CUSTOM') */}
+        {/* Custom Date Range Row */}
         {datePreset === "CUSTOM" && (
-          <div className="flex flex-wrap items-center gap-3 pt-2 bg-slate-50/80 p-3 rounded-xl border border-dashed border-slate-200">
-            <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-3 pt-2 bg-slate-50/80 p-3 rounded-xl border border-dashed border-slate-200 text-xs">
+            <span className="font-medium text-slate-500 flex items-center gap-1.5">
               <CalendarClock className="w-3.5 h-3.5" /> Date Range:
             </span>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">From:</label>
+              <label className="text-slate-500">From:</label>
               <input
                 type="date"
                 value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
+                onChange={(e) => handleFilterChange(setStartDate, e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">To:</label>
+              <label className="text-slate-500">To:</label>
               <input
                 type="date"
                 value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
+                onChange={(e) => handleFilterChange(setEndDate, e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
               />
             </div>
             {(startDate || endDate) && (
@@ -489,184 +708,355 @@ export default function TopicsPage() {
                   setStartDate("");
                   setEndDate("");
                 }}
-                className="text-xs text-[#5B50F5] hover:underline ml-auto"
+                className="text-[#5B50F5] hover:underline font-semibold ml-auto"
               >
-                Clear date range
+                Clear range
               </button>
             )}
           </div>
         )}
-      </div>
 
-      {/* Active filters status bar */}
-      <div className="flex items-center justify-between px-1 text-xs text-slate-500 font-medium">
-        <span>
-          Showing <strong className="text-slate-800">{filteredTopics.length}</strong> of {topics.length} topics
-          {hasActiveFilters && " (Filtered)"}
-        </span>
+        {/* Active Filter Chips Bar */}
         {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="inline-flex items-center gap-1 text-[#5B50F5] font-semibold hover:underline"
-          >
-            <XCircle className="w-3.5 h-3.5" />
-            Reset all filters
-          </button>
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+              <Filter className="w-3 h-3 text-[#5B50F5]" /> Active:
+            </span>
+            {debouncedSearchQuery && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-[#5B50F5] text-xs rounded-full font-medium">
+                Search: &ldquo;{debouncedSearchQuery}&rdquo;
+                <button onClick={() => setRawSearchQuery("")} className="hover:text-indigo-800">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {statusFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-full font-medium">
+                Status: {statusFilter}
+                <button onClick={() => setStatusFilter("ALL")} className="hover:text-amber-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {typeFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-800 text-xs rounded-full font-medium">
+                Family: {typeFilter}
+                <button onClick={() => setTypeFilter("ALL")} className="hover:text-sky-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {intelligenceFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 border border-purple-200 text-purple-800 text-xs rounded-full font-medium">
+                Intelligence: {intelligenceFilter}
+                <button onClick={() => setIntelligenceFilter("ALL")} className="hover:text-purple-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {skillFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 border border-violet-200 text-violet-800 text-xs rounded-full font-medium">
+                Skill: {skillFilter}
+                <button onClick={() => setSkillFilter("ALL")} className="hover:text-violet-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {subSkillFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-800 text-xs rounded-full font-medium">
+                Sub-skill: {subSkillFilter}
+                <button onClick={() => setSubSkillFilter("ALL")} className="hover:text-slate-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {datePreset !== "ALL" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-full font-medium">
+                Date: {datePreset === "CUSTOM" ? `${startDate || "Start"} to ${endDate || "End"}` : datePreset}
+                <button onClick={() => setDatePreset("ALL")} className="hover:text-emerald-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            <button
+              onClick={clearFilters}
+              className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline ml-auto"
+            >
+              Clear All Filters
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Topics list */}
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse shadow-sm">
-              <div className="flex justify-between items-center">
-                <div className="space-y-2 flex-1">
-                  <div className="h-5 bg-slate-200 rounded w-1/3" />
-                  <div className="h-4 bg-slate-100 rounded w-2/3" />
-                </div>
-                <div className="flex gap-3 ml-6">
-                  <div className="h-7 bg-slate-100 rounded-full w-28" />
-                  <div className="h-9 bg-slate-200 rounded-xl w-20" />
-                </div>
+      {/* Results Header Counter */}
+      <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+        <span>
+          Showing {totalItems === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}–
+          {Math.min(currentPage * PAGE_SIZE, totalItems)} of {totalItems} topics
+          {topics.length !== totalItems && ` (filtered from ${topics.length} total)`}
+        </span>
+        {totalPages > 1 && (
+          <span>
+            Page {currentPage} of {totalPages}
+          </span>
+        )}
+      </div>
+
+      {/* Error state */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-red-800">Error Loading Topics</h3>
+            <p className="text-xs text-red-600 mt-0.5">{errorMessage}</p>
+          </div>
+          <button
+            onClick={fetchTopics}
+            className="px-3 py-1 bg-white border border-red-200 text-xs font-semibold text-red-700 rounded-lg hover:bg-red-50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Loading state skeleton */}
+      {loading && (
+        <div className="space-y-4">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-3 animate-pulse">
+              <div className="flex gap-2">
+                <div className="h-5 w-24 bg-slate-200 rounded" />
+                <div className="h-5 w-20 bg-slate-200 rounded-full" />
               </div>
+              <div className="h-6 w-3/4 bg-slate-200 rounded" />
+              <div className="h-4 w-full bg-slate-100 rounded" />
+              <div className="h-4 w-1/3 bg-slate-100 rounded" />
             </div>
           ))}
         </div>
-      ) : errorMessage ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-14 flex flex-col items-center justify-center text-center shadow-sm">
-          <AlertCircle className="w-10 h-10 text-red-400 mb-4" />
-          <h3 className="text-lg font-bold text-slate-900 mb-2">Unable to load topics</h3>
-          <p className="text-slate-500 mb-2 text-sm">{errorMessage}</p>
-          <p className="text-slate-400 mb-6 text-xs">Verify that the API service is reachable.</p>
-          <button
-            onClick={fetchTopics}
-            className="px-5 py-2 bg-[#5B50F5] text-white rounded-xl font-medium hover:bg-[#4740d4] transition-colors shadow-sm text-sm"
-          >
-            Try Again
-          </button>
-        </div>
-      ) : filteredTopics.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-16 flex flex-col items-center justify-center text-center shadow-sm">
-          <FileText className="w-12 h-12 text-slate-200 mb-4" />
-          <h3 className="text-lg font-bold text-slate-900 mb-2">
-            {hasActiveFilters ? "No matching topics found" : "No topics in library"}
-          </h3>
-          <p className="text-slate-400 max-w-sm text-sm mb-5">
+      )}
+
+      {/* Empty state */}
+      {!loading && !errorMessage && filteredTopics.length === 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+          <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto text-[#5B50F5]">
+            <Search className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-800">No matching topics found</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
             {hasActiveFilters
-              ? "None of the topics match your current filter and search criteria."
-              : "No topics are stored in the database yet. Discover and save candidates to get started."}
+              ? "None of your stored topics match the current filter criteria. Try adjusting or clearing your filters."
+              : "No activity topics have been discovered yet. Generate your first topic to get started!"}
           </p>
           {hasActiveFilters ? (
             <button
               onClick={clearFilters}
-              className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors shadow-sm"
+              className="px-4 py-2 bg-indigo-50 border border-indigo-200 text-[#5B50F5] text-xs font-semibold rounded-xl hover:bg-indigo-100 transition-colors"
             >
               Clear All Filters
             </button>
           ) : (
             <Link
               href="/topics/generate"
-              className="px-4 py-2 bg-[#5B50F5] text-white rounded-xl text-sm font-semibold hover:bg-[#4740d4] transition-colors shadow-sm"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5B50F5] text-white text-xs font-semibold rounded-xl hover:bg-[#4740d4] transition-colors shadow-sm"
             >
+              <Sparkles className="w-3.5 h-3.5" />
               Discover Topics
             </Link>
           )}
         </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredTopics.map((t: any) => {
-            const topicLabel = t.topic_family_name || t.topic?.topic_type || "General";
-            const status = t.topic?.status || "DRAFT";
-            const keywords = t.keywords || [];
-            const skills = t.skills || [];
-            const primaryIntel = skills[0]?.intelligence_name;
+      )}
+
+      {/* Topics list */}
+      {!loading && !errorMessage && paginatedTopics.length > 0 && (
+        <div className="space-y-4">
+          {paginatedTopics.map((item) => {
+            const topic = item.topic || {};
+            const topicId = topic.topic_id;
+            const topicFamily = item.topic_family_name || topic.topic_type || "General";
+            const status = topic.status || "DRAFT";
+            const isEligibleForApproval = status.toUpperCase() === "DRAFT" || status.toUpperCase() === "REVIEW";
+            const isApproved = status.toUpperCase() === "APPROVED" || status.toUpperCase() === "SELECTED";
+            const isActing = actionLoadingId === topicId;
+
+            // Educational metadata display
+            const primaryIntel =
+              topic.user_selected_intelligence ||
+              topic.suggested_intelligence ||
+              item.mappings?.user_selected?.intelligence ||
+              item.mappings?.suggested?.intelligence ||
+              (item.skills && item.skills[0]?.intelligence_name);
+
+            const displaySkills = [
+              ...(topic.user_selected_skills || []),
+              ...(topic.suggested_skills || []),
+              ...(item.skills ? item.skills.map((s: any) => s.skill_name) : []),
+            ].filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 4);
 
             return (
               <div
-                key={t.topic.topic_id}
-                className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:shadow-md hover:border-slate-300 transition-all group"
+                key={topicId}
+                className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-all space-y-4"
               >
-                {/* Content */}
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="text-xs font-mono font-semibold text-slate-400">
-                      {t.topic.topic_id}
-                    </span>
+                {/* Card Top: Badges and Actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-400">{topicId}</span>
                     <StatusBadge status={status} />
-                    <TopicTypeBadge label={topicLabel} />
+                    <TopicTypeBadge label={topicFamily} />
+                    {topic.age_min !== undefined && topic.age_max !== undefined && (
+                      <span className="text-xs text-slate-500 font-medium">
+                        • {topic.age_min}–{topic.age_max} yrs
+                      </span>
+                    )}
+                    {topic.target_class && (
+                      <span className="text-xs text-slate-400">({topic.target_class})</span>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isEligibleForApproval && (
+                      <button
+                        onClick={() => handleApproveAndGenerate(topicId)}
+                        disabled={actionLoadingId !== null}
+                        className="px-3.5 py-1.5 bg-[#5B50F5] hover:bg-[#4740d4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                        title="Approve topic and immediately generate activities"
+                      >
+                        {isActing ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Approving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Approve &amp; Generate Activities →</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {isApproved && (
+                      <Link
+                        href={`/activities?topic_id=${topicId}`}
+                        className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-[#5B50F5] border border-indigo-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                        title="Generate activities for this approved topic"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Generate Activities →</span>
+                      </Link>
+                    )}
+
+                    <Link
+                      href={`/topics/detail/?id=${topicId}`}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 bg-white rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors shadow-2xs"
+                    >
+                      View →
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Title & Description */}
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 leading-snug">
+                    <Link
+                      href={`/topics/detail/?id=${topicId}`}
+                      className="hover:text-[#5B50F5] transition-colors"
+                    >
+                      {topic.topic}
+                    </Link>
+                  </h3>
+                  <p className="text-slate-600 text-sm mt-1 line-clamp-2 leading-relaxed">
+                    {topic.short_description || topic.full_description || "No description provided."}
+                  </p>
+                </div>
+
+                {/* Educational Tags & Metadata Footer */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {primaryIntel && (
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-[#5B50F5] font-semibold text-[11px]">
+                        <Compass className="w-3 h-3" />
                         {primaryIntel}
                       </span>
                     )}
-                    {t.topic.age_suitability && (
-                      <span className="text-xs text-slate-400 font-medium">
-                        • {t.topic.age_suitability}
+                    {displaySkills.map((sk) => (
+                      <span
+                        key={sk}
+                        className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium"
+                      >
+                        {sk}
                       </span>
-                    )}
+                    ))}
                   </div>
 
-                  <h3 className="font-bold text-slate-900 text-base group-hover:text-[#5B50F5] transition-colors">
-                    {t.topic.topic}
-                  </h3>
-
-                  <p className="text-slate-500 text-sm line-clamp-2">
-                    {t.topic.short_description || t.topic.full_description || t.topic.topic_hook || "No description provided."}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500">
-                    {formatDateTime(t.topic.created_at) && (
-                      <span className="flex items-center gap-1.5">
-                        <CalendarClock className="h-3.5 w-3.5 text-slate-400" />
-                        <time dateTime={t.topic.created_at}>
-                          Created {formatDateTime(t.topic.created_at)}
-                        </time>
-                      </span>
-                    )}
-                    {skills.length > 0 && (
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        {skills.map((s: any) => s.skill_name || s.sub_skill_name).filter(Boolean).slice(0, 2).join(" • ")}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Keywords chips */}
-                  {keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {keywords.slice(0, 6).map((kw: string) => (
-                        <span
-                          key={kw}
-                          className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-medium"
-                        >
-                          {kw}
-                        </span>
-                      ))}
-                      {keywords.length > 6 && (
-                        <span className="text-xs text-slate-400 self-center">
-                          +{keywords.length - 6} more
-                        </span>
-                      )}
+                  {topic.created_at && (
+                    <div className="flex items-center gap-1 text-slate-400 text-[11px]">
+                      <CalendarClock className="w-3.5 h-3.5" />
+                      <span>Created {formatDateTime(topic.created_at)}</span>
                     </div>
                   )}
-                </div>
-
-                {/* View button */}
-                <div className="shrink-0 flex items-center">
-                  <Link
-                    href={{
-                      pathname: "/topics/detail",
-                      query: { id: t.topic.topic_id },
-                    }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group-hover:border-[#5B50F5] group-hover:text-[#5B50F5]"
-                  >
-                    View <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!loading && !errorMessage && totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2 px-1">
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 transition-colors shadow-2xs"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Previous
+          </button>
+
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+              // Show first, last, current, and neighbours
+              if (
+                pageNum === 1 ||
+                pageNum === totalPages ||
+                (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+              ) {
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-8 h-8 rounded-xl text-xs font-semibold transition-all ${
+                      currentPage === pageNum
+                        ? "bg-[#5B50F5] text-white shadow-xs"
+                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              }
+              if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
+                return (
+                  <span key={pageNum} className="px-1 text-slate-400 text-xs">
+                    ...
+                  </span>
+                );
+              }
+              return null;
+            })}
+          </div>
+
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-40 transition-colors shadow-2xs"
+          >
+            Next
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

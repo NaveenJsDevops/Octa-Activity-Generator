@@ -23,6 +23,11 @@ class TopicDiscoveryRequest(BaseModel):
             raise ValueError("age_min cannot be greater than age_max")
         return self
 
+class TopicCandidateEditRequest(BaseModel):
+    topic: Optional[str] = None
+    short_description: Optional[str] = None
+    full_description: Optional[str] = None
+
 class TopicCandidate(BaseModel):
     topic: str
     short_description: str

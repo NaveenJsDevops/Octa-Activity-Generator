@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Dict, Any
 from apps.api.models.topic_discovery import (
     TopicDiscoveryRequest, TopicDiscoveryResult, 
-    TopicCandidate, RejectedCandidate
+    TopicCandidate, RejectedCandidate, TopicCandidateEditRequest
 )
 from apps.api.services.topic_discovery.service import TopicDiscoveryService
 from apps.api.repositories.firestore import FirestoreRepository
@@ -76,6 +76,18 @@ def keep_candidate(
 ):
     try:
         return service.keep_candidate(session_id, index)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.patch("/discovery/{session_id}/candidate/{index}")
+def edit_candidate(
+    session_id: str,
+    index: int,
+    req: TopicCandidateEditRequest,
+    service: TopicDiscoveryService = Depends(get_topic_discovery_service)
+):
+    try:
+        return service.edit_candidate(session_id, index, req)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

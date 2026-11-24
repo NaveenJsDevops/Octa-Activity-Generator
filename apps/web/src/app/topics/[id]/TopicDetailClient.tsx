@@ -27,6 +27,7 @@ import {
   Sparkles,
   UserCheck,
   Compass,
+  Loader2,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/dateTime";
 
@@ -206,6 +207,8 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
     }
   };
 
+  const [approvingAndGenerating, setApprovingAndGenerating] = useState(false);
+
   const handleApprove = async () => {
     setActionError("");
     try {
@@ -219,6 +222,24 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
       await fetchDetail();
     } catch (err: any) {
       setActionError(err.message || "Approval failed");
+    }
+  };
+
+  const handleApproveAndGenerate = async () => {
+    setApprovingAndGenerating(true);
+    setActionError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}/approve`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to approve topic");
+      }
+      router.push(`/activities?topic_id=${topicId}`);
+    } catch (err: any) {
+      setActionError(err.message || "Approval failed");
+      setApprovingAndGenerating(false);
     }
   };
 
@@ -377,16 +398,43 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
               </div>
             ) : (
               <div className="flex items-center gap-2 flex-wrap">
-                {status !== "APPROVED" && (
-                  <div className="flex flex-col items-end gap-1">
+                {status !== "APPROVED" ? (
+                  <>
+                    <button
+                      onClick={handleApproveAndGenerate}
+                      disabled={approvingAndGenerating}
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#5B50F5] hover:bg-[#4740d4] text-white font-semibold rounded-xl text-sm transition-colors shadow-sm disabled:opacity-50"
+                      title="Approve this topic and proceed immediately to Activity Generation"
+                    >
+                      {approvingAndGenerating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Approving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Approve &amp; Generate Activities →</span>
+                        </>
+                      )}
+                    </button>
                     <button
                       onClick={handleApprove}
-                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#5B50F5] hover:bg-[#4740d4] text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
+                      disabled={approvingAndGenerating}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold rounded-xl text-sm transition-colors shadow-2xs"
                     >
-                      <Check className="w-4 h-4" />
-                      Approve
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      <span>Approve</span>
                     </button>
-                  </div>
+                  </>
+                ) : (
+                  <Link
+                    href={`/activities?topic_id=${topicId}`}
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#5B50F5] hover:bg-[#4740d4] text-white font-semibold rounded-xl text-sm transition-colors shadow-sm"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Generate Activities →</span>
+                  </Link>
                 )}
 
                 <button

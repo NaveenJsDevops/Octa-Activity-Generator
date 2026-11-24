@@ -312,6 +312,25 @@ class TopicDiscoveryService:
             
         return {"status": "success", "topic": topic.model_dump()}
 
+    def edit_candidate(self, session_id: str, index: int, edit_req: Any) -> Dict[str, Any]:
+        """Edits topic title or descriptions of an in-memory candidate before saving."""
+        session = SessionStore.get_session(session_id)
+        if not session:
+            raise ValueError("Invalid or expired session ID")
+            
+        if index < 0 or index >= len(session.candidates):
+            raise ValueError("Invalid candidate index")
+            
+        candidate = session.candidates[index]
+        if hasattr(edit_req, "topic") and edit_req.topic is not None and edit_req.topic.strip():
+            candidate.topic = edit_req.topic.strip()
+        if hasattr(edit_req, "short_description") and edit_req.short_description is not None:
+            candidate.short_description = edit_req.short_description.strip()
+        if hasattr(edit_req, "full_description") and edit_req.full_description is not None:
+            candidate.full_description = edit_req.full_description.strip()
+            
+        return {"status": "success", "candidate": candidate.model_dump()}
+
     def reject_candidate(self, session_id: str, index: int) -> Dict[str, Any]:
         """Rejects a candidate (does not persist)."""
         session = SessionStore.get_session(session_id)

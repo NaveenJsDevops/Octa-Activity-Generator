@@ -275,6 +275,8 @@ class FirestoreManager:
                     batch.commit()
             except Exception as e:
                 logger.error(f"Failed to batch write {len(prepared_entries)} entries to Firestore: {e}")
+                if not async_mode:
+                    raise
 
         if async_mode:
             self._executor.submit(_batch_write)

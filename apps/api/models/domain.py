@@ -171,6 +171,7 @@ class PostActivity(BaseModel):
 
 
 class ActivityConcept(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     concept_id: str
     topic_id: str
     activity_title: str
@@ -198,6 +199,15 @@ class ActivityConcept(BaseModel):
     pre_activity: Optional[PreActivity] = None
     main_activity: Optional[MainActivity] = None
     post_activity: Optional[PostActivity] = None
+    topic_family_name: Optional[str] = None
+    country_context: Optional[str] = None
+    keywords: list[str] = Field(default_factory=list)
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: list[str] = Field(default_factory=list)
+    user_selected_sub_skills: list[str] = Field(default_factory=list)
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: list[str] = Field(default_factory=list)
+    suggested_sub_skills: list[str] = Field(default_factory=list)
 
     @field_validator("materials", "instructions", mode="before")
     @classmethod
@@ -211,6 +221,7 @@ class ActivityConcept(BaseModel):
 
 
 class Activity(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     activity_id: str
     concept_id: str
     topic_id: str
@@ -236,6 +247,15 @@ class Activity(BaseModel):
     pre_activity: Optional[PreActivity] = None
     main_activity: Optional[MainActivity] = None
     post_activity: Optional[PostActivity] = None
+    topic_family_name: Optional[str] = None
+    country_context: Optional[str] = None
+    keywords: list[str] = Field(default_factory=list)
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: list[str] = Field(default_factory=list)
+    user_selected_sub_skills: list[str] = Field(default_factory=list)
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: list[str] = Field(default_factory=list)
+    suggested_sub_skills: list[str] = Field(default_factory=list)
 
     @field_validator("materials", mode="before")
     @classmethod

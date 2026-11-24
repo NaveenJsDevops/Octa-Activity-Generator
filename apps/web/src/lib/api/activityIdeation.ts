@@ -13,6 +13,12 @@ export interface TopicDetail {
     status: string;
     created_at?: string;
     updated_at?: string;
+    user_selected_intelligence?: string;
+    user_selected_skills?: string[];
+    user_selected_sub_skills?: string[];
+    suggested_intelligence?: string;
+    suggested_skills?: string[];
+    suggested_sub_skills?: string[];
   };
   topic_family_name: string;
   keywords: string[];
@@ -21,7 +27,21 @@ export interface TopicDetail {
     skill_name: string;
     sub_skill_id: string;
     sub_skill_name: string;
+    intelligence_id?: string;
+    intelligence_name?: string;
   }>;
+  mappings?: {
+    user_selected?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+    suggested?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+  };
 }
 
 export interface PreActivity {
@@ -76,6 +96,27 @@ export interface ActivityConcept {
   pre_activity?: PreActivity | null;
   main_activity?: MainActivity | null;
   post_activity?: PostActivity | null;
+  topic_family_name?: string;
+  country_context?: string;
+  keywords?: string[];
+  mappings?: {
+    user_selected?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+    suggested?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+  };
+  user_selected_intelligence?: string;
+  user_selected_skills?: string[];
+  user_selected_sub_skills?: string[];
+  suggested_intelligence?: string;
+  suggested_skills?: string[];
+  suggested_sub_skills?: string[];
 }
 
 export interface ActivityIdeationResult {
@@ -114,11 +155,47 @@ export interface ActivityRecord {
   pre_activity?: PreActivity | null;
   main_activity?: MainActivity | null;
   post_activity?: PostActivity | null;
+  topic_family_name?: string;
+  country_context?: string;
+  keywords?: string[];
+  mappings?: {
+    user_selected?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+    suggested?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+  };
+  user_selected_intelligence?: string;
+  user_selected_skills?: string[];
+  user_selected_sub_skills?: string[];
+  suggested_intelligence?: string;
+  suggested_skills?: string[];
+  suggested_sub_skills?: string[];
 }
 
 export interface ActivityLibraryItem {
   activity: ActivityRecord;
   topic_title: string;
+  topic_family_name?: string;
+  country_context?: string;
+  keywords?: string[];
+  mappings?: {
+    user_selected?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+    suggested?: {
+      intelligence?: string | null;
+      skills?: string[];
+      sub_skills?: string[];
+    };
+  };
   skills: Array<{
     skill_id: string;
     skill_name?: string;
@@ -193,6 +270,20 @@ export async function regenerateConcept(sessionId: string, conceptId: string): P
     method: "POST",
   });
   if (!res.ok) throw await responseError(res, "Failed to regenerate activity");
+  return res.json();
+}
+
+export async function regenerateConceptSection(
+  sessionId: string,
+  conceptId: string,
+  section: "pre_activity" | "main_activity" | "post_activity"
+): Promise<ActivityConcept> {
+  const res = await fetch(`${API_BASE_URL}/api/activity-ideation/sessions/${sessionId}/concepts/${conceptId}/regenerate-section`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ section }),
+  });
+  if (!res.ok) throw await responseError(res, `Failed to regenerate ${section.replace('_', ' ')}`);
   return res.json();
 }
 

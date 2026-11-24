@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Optional, Type, TypeVar
 from pydantic import BaseModel
 import anthropic
@@ -12,6 +13,14 @@ from apps.api.services.ai.exceptions import (
 )
 
 T = TypeVar('T', bound=BaseModel)
+
+def _clean_markdown_fence(content: str) -> str:
+    """Robustly strips markdown JSON code fences and extraneous whitespace."""
+    if not content:
+        return "{}"
+    cleaned = re.sub(r'^\s*```(?:json)?\s*', '', content.strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s*```\s*$', '', cleaned)
+    return cleaned.strip() or "{}"
 
 class AnthropicProvider(AIProvider):
     def __init__(self):
@@ -92,19 +101,8 @@ class AnthropicProvider(AIProvider):
                 kwargs["system"] = system_prompt
                 
             response = self.client.messages.create(**kwargs)
-            content = response.content[0].text
-            
-            # Sometimes Claude wraps in ```json ... ``` despite instructions
-            if content.startswith("```json"):
-                content = content[7:]
-                if content.endswith("```"):
-                    content = content[:-3]
-            elif content.startswith("```"):
-                content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                    
-            content = content.strip()
+            raw_content = response.content[0].text
+            content = _clean_markdown_fence(raw_content)
             
             return AIResponse(
                 content=content,

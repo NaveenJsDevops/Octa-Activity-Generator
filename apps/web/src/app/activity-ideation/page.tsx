@@ -14,6 +14,7 @@ import {
   getConcepts,
   getReviewSession,
   regenerateConcept,
+  regenerateConceptSection,
   rejectConcept,
   selectConcept,
   TopicDetail,
@@ -26,6 +27,7 @@ import { Skeleton } from "@/components/activity-ideation/Skeleton";
 function ActivityReviewContent() {
   const searchParams = useSearchParams();
   const topicId = searchParams.get("topic_id");
+  const countParam = parseInt(searchParams.get("count") || "5", 10) || 5;
   const [topicData, setTopicData] = useState<TopicDetail | null>(null);
   const [concepts, setConcepts] = useState<ActivityConcept[]>([]);
   const [legacyConcepts, setLegacyConcepts] = useState<ActivityConcept[]>([]);
@@ -177,7 +179,7 @@ function ActivityReviewContent() {
         </Link>
       </div>
 
-      <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-[#5B50F5]">Activity generation · {topicData.topic.status}</span>
@@ -186,27 +188,134 @@ function ActivityReviewContent() {
               {topicData.topic.full_description || topicData.topic.short_description}
             </p>
           </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm space-y-1">
             <div className="font-semibold text-slate-800">Ages {topicData.topic.age_min}–{topicData.topic.age_max}</div>
-            <div className="mt-1 text-slate-500">{topicData.topic.target_class || "Class/grade not specified"}</div>
-            <div className="mt-1 text-slate-500">{topicData.topic_family_name}</div>
+            <div className="text-xs text-slate-500">{topicData.topic.target_class || "Class/grade not specified"}</div>
+            <div className="text-xs text-slate-500">{topicData.topic_family_name}</div>
+            {topicData.topic.country_context && (
+              <div className="text-xs text-slate-500">{topicData.topic.country_context}</div>
+            )}
           </div>
         </div>
-        {topicData.skills.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {topicData.skills.map((skill) => (
-              <span key={`${skill.skill_id}-${skill.sub_skill_id}`} className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs text-indigo-700">
-                {skill.skill_name} · {skill.sub_skill_name}
-              </span>
-            ))}
-          </div>
-        )}
+
+        {/* Carried-forward Intelligence & Skills Banner */}
+        {(() => {
+          const userSelectedIntel = topicData.mappings?.user_selected?.intelligence || topicData.topic.user_selected_intelligence;
+          const userSelectedSkills = topicData.mappings?.user_selected?.skills || topicData.topic.user_selected_skills || [];
+          const userSelectedSubSkills = topicData.mappings?.user_selected?.sub_skills || topicData.topic.user_selected_sub_skills || [];
+          const suggestedIntel = topicData.mappings?.suggested?.intelligence || topicData.topic.suggested_intelligence;
+          const suggestedSkills = topicData.mappings?.suggested?.skills || topicData.topic.suggested_skills || [];
+          const suggestedSubSkills = topicData.mappings?.suggested?.sub_skills || topicData.topic.suggested_sub_skills || [];
+
+          return (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5 text-xs grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">User-Selected Parameters:</span>
+                <div>
+                  <span className="text-slate-500 font-medium">Intelligence: </span>
+                  <span className="font-semibold text-slate-800">{userSelectedIntel || "None (Open Discovery)"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium">Skill: </span>
+                  {userSelectedSkills.length > 0 ? (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {userSelectedSkills.map((s) => (
+                        <span key={s} className="rounded bg-indigo-100/70 border border-indigo-200/50 px-1.5 py-0.5 text-[10px] text-indigo-800 font-medium">{s}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">None</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium">Sub skill: </span>
+                  {userSelectedSubSkills.length > 0 ? (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {userSelectedSubSkills.map((s) => (
+                        <span key={s} className="rounded bg-indigo-100/70 border border-indigo-200/50 px-1.5 py-0.5 text-[10px] text-indigo-800 font-medium">{s}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">None</span>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B50F5]">AI-Suggested Mappings:</span>
+                <div>
+                  <span className="text-slate-500 font-medium">Intelligence: </span>
+                  <span className="font-semibold text-[#5B50F5]">{suggestedIntel || "None suggested"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium">Skill: </span>
+                  {suggestedSkills.length > 0 ? (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {suggestedSkills.map((s) => (
+                        <span key={s} className="rounded bg-violet-100/70 border border-violet-200/50 px-1.5 py-0.5 text-[10px] text-violet-800 font-medium">{s}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">None suggested</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-500 font-medium">Sub skill: </span>
+                  {suggestedSubSkills.length > 0 ? (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {suggestedSubSkills.map((s) => (
+                        <span key={s} className="rounded bg-slate-200/70 border border-slate-300/50 px-1.5 py-0.5 text-[10px] text-slate-700 font-medium">{s}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">None suggested</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Keywords and Supported Skills */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+          {topicData.skills.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {topicData.skills.map((skill) => (
+                <span key={`${skill.skill_id}-${skill.sub_skill_id}`} className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs text-indigo-700 font-medium">
+                  {skill.skill_name} · {skill.sub_skill_name}
+                </span>
+              ))}
+            </div>
+          )}
+          {topicData.keywords.length > 0 && (
+            <div className="flex flex-wrap gap-1 ml-auto">
+              {topicData.keywords.map((kw) => (
+                <span key={kw} className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                  #{kw}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
 
       {error && <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
-      {notice && <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{notice}</div>}
+      {notice && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{notice}</span>
+          </div>
+          <Link
+            href="/activities/library"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-colors shadow-2xs shrink-0"
+          >
+            <Library className="h-3.5 w-3.5" />
+            <span>Open in Activity Library →</span>
+          </Link>
+        </div>
+      )}
 
-      <GenerationControls onGenerate={handleGenerate} isGenerating={isGenerating} isDisabled={pendingCount > 0} />
+      <GenerationControls onGenerate={handleGenerate} isGenerating={isGenerating} isDisabled={pendingCount > 0} defaultCount={countParam} />
       {generationResult && (generationResult.duplicate_count > 0 || generationResult.rejected_count > 0) && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {generationResult.duplicate_count} duplicate and {generationResult.rejected_count} invalid candidates were excluded from review.
@@ -232,6 +341,19 @@ function ActivityReviewContent() {
                 key={concept.concept_id}
                 concept={concept}
                 disabled={Boolean(busyConceptId)}
+                topicMeta={{
+                  topic_title: topicData.topic.topic,
+                  topic_family_name: topicData.topic_family_name,
+                  country_context: topicData.topic.country_context,
+                  keywords: topicData.keywords,
+                  mappings: topicData.mappings,
+                  user_selected_intelligence: topicData.mappings?.user_selected?.intelligence || topicData.topic.user_selected_intelligence,
+                  user_selected_skills: topicData.mappings?.user_selected?.skills || topicData.topic.user_selected_skills,
+                  user_selected_sub_skills: topicData.mappings?.user_selected?.sub_skills || topicData.topic.user_selected_sub_skills,
+                  suggested_intelligence: topicData.mappings?.suggested?.intelligence || topicData.topic.suggested_intelligence,
+                  suggested_skills: topicData.mappings?.suggested?.skills || topicData.topic.suggested_skills,
+                  suggested_sub_skills: topicData.mappings?.suggested?.sub_skills || topicData.topic.suggested_sub_skills,
+                }}
                 onEdit={(updates) => runConceptAction(
                   concept.concept_id,
                   () => updateConcept(sessionId, concept.concept_id, updates),
@@ -250,6 +372,11 @@ function ActivityReviewContent() {
                   concept.concept_id,
                   () => rejectConcept(sessionId, concept.concept_id),
                   "Activity rejected. It was not saved.",
+                )}
+                onRegenerateSection={(section) => runConceptAction(
+                  concept.concept_id,
+                  () => regenerateConceptSection(sessionId, concept.concept_id, section),
+                  `${section === "pre_activity" ? "Pre-Activity" : section === "main_activity" ? "Main Activity" : "Post-Activity"} regenerated.`,
                 )}
               />
             ))}

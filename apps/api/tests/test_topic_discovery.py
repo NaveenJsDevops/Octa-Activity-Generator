@@ -5,7 +5,12 @@ import shutil
 from unittest.mock import MagicMock
 from datetime import datetime
 
-from apps.api.models.topic_discovery import TopicDiscoveryRequest, TopicDiscoveryOutput, TopicCandidate
+from apps.api.models.topic_discovery import (
+    TopicDiscoveryRequest,
+    TopicDiscoveryOutput,
+    TopicCandidate,
+    TopicCandidateEditRequest,
+)
 from apps.api.services.topic_discovery.service import TopicDiscoveryService
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.repositories.firestore import FirestoreRepository
@@ -434,3 +439,57 @@ def test_topic_discovery_without_user_selection_shows_ai_suggested(service, orch
     topic_data = keep_result["topic"]
     assert topic_data["user_selected_intelligence"] is None
     assert topic_data["suggested_intelligence"] == "Artistic"
+
+def test_edit_candidate_in_session_and_persist_to_firestore(service, orchestrator, repo):
+    request = TopicDiscoveryRequest(
+        age_min=7,
+        age_max=9,
+        keywords=["robotics"],
+        requested_count=1
+    )
+
+    orchestrator.generate_structured.return_value = TopicDiscoveryOutput(
+        topics=[
+            TopicCandidate(
+                topic="Initial Robot Topic",
+                short_description="Initial short description.",
+                full_description="Initial full description.",
+                activity_potential="HIGH",
+                age_suitability="7-9",
+                keywords=["robotics"],
+                suggested_intelligence="Mechanical",
+                suggested_skills=[],
+                suggested_sub_skills=[]
+            )
+        ]
+    )
+
+    repo.append_record("GenerationRuns", {
+        "generation_id": "gen-edit-test",
+        "generation_type": "TOPIC_DISCOVERY",
+        "model": "gemini",
+        "prompt_version": "v1.1",
+        "started_at": datetime.now(),
+        "status": "COMPLETED"
+    })
+
+    result = service.discover_topics(request)
+    session_id = result["session_id"]
+
+    # Edit the candidate in place
+    edit_req = TopicCandidateEditRequest(
+        topic="Refined Rover Navigation",
+        short_description="Design autonomous rovers with obstacle sensors.",
+        full_description="A deeper exploration into autonomous path planning and sensor calibration."
+    )
+    edit_res = service.edit_candidate(session_id, 0, edit_req)
+    assert edit_res["candidate"]["topic"] == "Refined Rover Navigation"
+    assert edit_res["candidate"]["short_description"] == "Design autonomous rovers with obstacle sensors."
+
+    # Save to Firestore and verify edited fields were persisted
+    keep_result = service.keep_candidate(session_id, 0)
+    saved_topic = keep_result["topic"]
+    assert saved_topic["topic"] == "Refined Rover Navigation"
+    assert saved_topic["short_description"] == "Design autonomous rovers with obstacle sensors."
+    assert saved_topic["full_description"] == "A deeper exploration into autonomous path planning and sensor calibration."
+

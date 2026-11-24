@@ -14,7 +14,7 @@ from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.activity_ideation.service import ActivityIdeationService
 from apps.api.services.ai.orchestrator import AIOrchestrator
 from apps.api.services.ai.exceptions import AIRetryExhaustedError
-from apps.api.models.domain import TopicStatus, ActivityStatus
+from apps.api.models.domain import TopicStatus, ActivityStatus, PreActivity, MainActivity, PostActivity
 from apps.api.models.activity_ideation import ActivityIdeationAIResponse, AIActivityConcept
 
 
@@ -399,6 +399,82 @@ def test_regenerate_replaces_only_temporary_candidate(client, mock_ai, test_data
     assert response.json()["activity_title"] == "Habitat Corridor Map"
     assert test_data_dir.read_sheet("Activities") == []
 
+def test_regenerate_concept_section_pre_activity(client, mock_ai, test_data_dir):
+    initial = AIActivityConcept(
+        **ai_template("Original Activity", "Observe wildlife near home."),
+        activity_type="Investigation",
+        primary_skill="Observation",
+        primary_sub_skill="Noticing details",
+    )
+    new_pre = PreActivity(
+        activity_description="A brand new regenerated pre-activity description.",
+        parents_note="Special adult supervision note.",
+        parents_guide="Step-by-step adult guide.",
+        pre_activity_engagement=["Warm-up prompt 1", "Warm-up prompt 2"],
+        why_how_is_this_important="Explaining why this section matters.",
+        lets_get_started="Ready, set, go!"
+    )
+    mock_ai.generate_structured.side_effect = [
+        ActivityIdeationAIResponse(activities=[initial]),
+        new_pre,
+    ]
+    generated = client.post(
+        "/api/activity-ideation/generate",
+        json={"topic_id": "TOP-001", "requested_count": 1},
+    ).json()
+    concept = generated["concepts"][0]
+
+    response = client.post(
+        f"/api/activity-ideation/sessions/{generated['session_id']}/concepts/{concept['concept_id']}/regenerate-section",
+        json={"section": "pre_activity"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["concept_id"] == concept["concept_id"]
+    # Pre-activity is updated
+    assert data["pre_activity"]["activity_description"] == "A brand new regenerated pre-activity description."
+    assert data["pre_activity"]["parents_note"] == "Special adult supervision note."
+    assert data["activity_concept"] == "A brand new regenerated pre-activity description."
+    # Main activity and Post activity remain unchanged!
+    assert data["main_activity"]["activity_step_task_title"] == concept["main_activity"]["activity_step_task_title"]
+    assert data["post_activity"]["whats_next"] == concept["post_activity"]["whats_next"]
+
+def test_regenerate_concept_section_main_activity(client, mock_ai, test_data_dir):
+    initial = AIActivityConcept(
+        **ai_template("Original Activity", "Observe wildlife near home."),
+        activity_type="Investigation",
+        primary_skill="Observation",
+        primary_sub_skill="Noticing details",
+    )
+    new_main = MainActivity(
+        activity_step_task_title="Brand new core task title",
+        scenario_real_life_connection="Real world connection context.",
+        in_depth_description_and_process=["Step 1: Do this", "Step 2: Do that", "Step 3: Analyze"],
+        reflection_questions=["Question 1?", "Question 2?"]
+    )
+    mock_ai.generate_structured.side_effect = [
+        ActivityIdeationAIResponse(activities=[initial]),
+        new_main,
+    ]
+    generated = client.post(
+        "/api/activity-ideation/generate",
+        json={"topic_id": "TOP-001", "requested_count": 1},
+    ).json()
+    concept = generated["concepts"][0]
+
+    response = client.post(
+        f"/api/activity-ideation/sessions/{generated['session_id']}/concepts/{concept['concept_id']}/regenerate-section",
+        json={"section": "main_activity"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["main_activity"]["activity_step_task_title"] == "Brand new core task title"
+    assert data["learner_task"] == "Brand new core task title"
+    # Pre-activity and post-activity remain unchanged!
+    assert data["pre_activity"]["activity_description"] == concept["pre_activity"]["activity_description"]
+    assert data["post_activity"]["whats_next"] == concept["post_activity"]["whats_next"]
+
+
 def test_quota_failure_is_reported_and_saves_nothing(client, test_data_dir, mock_ai):
     mock_ai.generate_structured.side_effect = AIRetryExhaustedError("429 quota exceeded")
     response = client.post(
@@ -447,3 +523,322 @@ def test_activity_generation_rejects_unapproved_topics(client, test_data_dir):
         json={"topic_id": "TOP-001", "requested_count": 1},
     )
     assert response.status_code == 409
+
+def test_export_activity_excel_post(client):
+    payload = {
+        "activity_name": "Bird Feeder Craft",
+        "activity_duration": "30 minutes",
+        "topic_title": "Local Birds and Habitats",
+        "topic_family_name": "Nature & Environment",
+        "age_min": 7,
+        "age_max": 9,
+        "target_class": "Grade 3",
+        "country_context": "India",
+        "keywords": ["birds", "craft", "nature"],
+        "user_selected_intelligence": "Environmental",
+        "user_selected_skills": ["Observation"],
+        "user_selected_sub_skills": ["Ecosystems"],
+        "suggested_intelligence": "Creative",
+        "suggested_skills": ["Designing solutions"],
+        "suggested_sub_skills": ["Model building"],
+        "pre_activity": {
+            "activity_description": "Build a recycled bird feeder to observe garden birds.",
+            "parents_note": "Assist with cutting materials safely.",
+            "parents_guide": None,
+            "pre_activity_engagement": ["What birds have you seen nearby?"],
+            "why_how_is_this_important": "Encourages empathy and biodiversity appreciation.",
+            "lets_get_started": "Collect clean plastic containers and bird seeds."
+        },
+        "main_activity": {
+            "activity_step_task_title": "Build and hang the feeder",
+            "scenario_real_life_connection": "Urban ornithologists monitor bird populations using feeders.",
+            "in_depth_description_and_process": [
+                "Cut small feeding holes in the container with an adult.",
+                "Insert wooden spoons as perches.",
+                "Fill with seeds and hang near a window."
+            ],
+            "reflection_questions": [
+                "Which birds visited first?",
+                "How does weather affect feeding times?"
+            ]
+        },
+        "post_activity": {
+            "whats_next": "Keep a 7-day bird visitor log.",
+            "extend_the_learning": ["Try different types of bird feed."],
+            "how_to_improvise_or_level_up": "Design a squirrel-proof roof.",
+            "post_activity_summary": "A student-built bird feeder and 7-day field observation journal."
+        },
+        "learning_objective": "Understand local bird diets and nesting habits.",
+        "materials": ["Plastic bottle", "Wooden spoons", "Twine", "Bird seed"],
+        "assessment_criteria": "Active observation and recorded notes.",
+        "difficulty_level": "Beginner"
+    }
+    response = client.post("/api/activities/export/excel", json=payload)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment" in response.headers["content-disposition"]
+    assert len(response.content) > 1000
+
+def test_export_activity_excel_get(client, test_data_dir):
+    # Setup concept and approved activity
+    now = "2026-11-23T10:00:00"
+    test_data_dir.append_record("ActivityConcepts", {
+        "concept_id": "CON-1",
+        "topic_id": "TOP-001",
+        "activity_title": "Solar Oven S'mores",
+        "activity_type_id": "AT1",
+        "activity_concept": "Harness sunlight using a cardboard box.",
+        "learner_task": "Construct solar cooker",
+        "expected_output": "Solar-baked snack and temperature record",
+        "status": "APPROVED",
+        "created_at": now,
+    })
+    test_data_dir.append_record("Activities", {
+        "activity_id": "ACT-EXPORT-1",
+        "concept_id": "CON-1",
+        "topic_id": "TOP-001",
+        "title": "Solar Oven S'mores",
+        "description": "Harness sunlight using a cardboard box.",
+        "instructions": "1. Line box with foil\n2. Place marshmallows inside\n3. Angle towards sun",
+        "expected_output": "Solar-baked snack and temperature record",
+        "age_min": 8,
+        "age_max": 10,
+        "estimated_duration": 40,
+        "status": "APPROVED",
+        "created_at": now,
+        "updated_at": now,
+        "activity_name": "Solar Oven S'mores",
+        "activity_duration": "40 minutes",
+        "pre_activity": {
+            "activity_description": "Harness sunlight using a cardboard box.",
+            "parents_note": "Supervise sun exposure.",
+            "parents_guide": None,
+            "pre_activity_engagement": ["How hot does black paper get in the sun?"],
+            "why_how_is_this_important": "Demonstrates renewable solar thermal energy.",
+            "lets_get_started": "Gather a pizza box and aluminum foil."
+        },
+        "main_activity": {
+            "activity_step_task_title": "Construct solar cooker",
+            "scenario_real_life_connection": "Clean cookstoves in rural communities.",
+            "in_depth_description_and_process": [
+                "Line the pizza box flap with foil.",
+                "Cover the opening with plastic wrap.",
+                "Position facing direct sunlight."
+            ],
+            "reflection_questions": [
+                "How long did it take to melt?",
+                "What made the temperature rise?"
+            ]
+        },
+        "post_activity": {
+            "whats_next": "Test with different colored containers.",
+            "extend_the_learning": ["Calculate thermal efficiency."],
+            "how_to_improvise_or_level_up": "Add a reflector mirror.",
+            "post_activity_summary": "Cooked food using 100% solar energy."
+        }
+    })
+
+    response = client.get("/api/activities/ACT-EXPORT-1/export/excel")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment" in response.headers["content-disposition"]
+    assert len(response.content) > 1000
+
+def test_batch_export_excel(client):
+    activities = [
+        {
+            "activity_id": "ACT-BATCH-1",
+            "title": "Stargazing Compass",
+            "activity_duration": "25 minutes",
+            "topic_title": "Space & Stars",
+            "topic_family_name": "Space Exploration",
+            "age_min": 7,
+            "age_max": 9,
+            "target_class": "Grade 3",
+            "country_context": "India",
+            "user_selected_intelligence": "Environmental",
+            "user_selected_skills": ["Observation"],
+            "pre_activity": {
+                "activity_description": "Locate the North Star using a homemade compass.",
+                "parents_note": "Outdoor night assistance.",
+                "parents_guide": None,
+                "pre_activity_engagement": ["Which direction does Polaris point?"],
+                "why_how_is_this_important": "Ancient navigation science.",
+                "lets_get_started": "Step outside under a clear sky."
+            },
+            "main_activity": {
+                "activity_step_task_title": "Track stellar movement",
+                "scenario_real_life_connection": "Ancient mariners navigations.",
+                "in_depth_description_and_process": [
+                    "Locate Ursa Major constellation.",
+                    "Trace the pointer stars to Polaris.",
+                    "Record hourly position changes."
+                ],
+                "reflection_questions": [
+                    "Why does Polaris stay stationary?",
+                    "How does Earth's rotation affect other constellations?"
+                ]
+            },
+            "post_activity": {
+                "whats_next": "Build a star map.",
+                "extend_the_learning": ["Track constellations across seasons."],
+                "how_to_improvise_or_level_up": "Use binoculars for nebulae.",
+                "post_activity_summary": "Learned stellar alignment and celestial navigation."
+            }
+        },
+        {
+            "activity_id": "ACT-BATCH-2",
+            "title": "Seed Germination Lab",
+            "activity_duration": "30 minutes",
+            "topic_title": "Botany Basics",
+            "topic_family_name": "Nature & Environment",
+            "age_min": 6,
+            "age_max": 8,
+            "target_class": "Grade 2",
+            "country_context": "India",
+            "user_selected_intelligence": "Cognitive",
+            "user_selected_skills": ["Data Recording"],
+            "pre_activity": {
+                "activity_description": "Sprout seeds in cotton to observe root emergence.",
+                "parents_note": "Provide seeds and damp paper towels.",
+                "parents_guide": None,
+                "pre_activity_engagement": ["What does a seed need to wake up?"],
+                "why_how_is_this_important": "Plant biology fundamentals.",
+                "lets_get_started": "Dampen paper towel and place bean seeds."
+            },
+            "main_activity": {
+                "activity_step_task_title": "Measure root growth daily",
+                "scenario_real_life_connection": "Farming and food production.",
+                "in_depth_description_and_process": [
+                    "Place damp paper in clear zip bag.",
+                    "Tape to sunny window.",
+                    "Measure radicle length with ruler daily."
+                ],
+                "reflection_questions": [
+                    "Did roots grow upwards or downwards?",
+                    "Why do roots seek gravity?"
+                ]
+            },
+            "post_activity": {
+                "whats_next": "Transplant into potting soil.",
+                "extend_the_learning": ["Compare seeds in dark vs sunlight."],
+                "how_to_improvise_or_level_up": "Add colored water.",
+                "post_activity_summary": "Documented seed germination and gravitropism."
+            }
+        }
+    ]
+
+    response = client.post("/api/activities/export/excel/batch", json={"activities": activities})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment" in response.headers["content-disposition"]
+    assert "Batch_2_Items.xlsx" in response.headers["content-disposition"]
+    assert len(response.content) > 2000
+
+    # Test empty payload returns 400
+    empty_resp = client.post("/api/activities/export/excel/batch", json={"activities": []})
+    assert empty_resp.status_code == 400
+
+def test_batch_export_limit_exceeded(client):
+    # Test that > 50 activities returns HTTP 400
+    oversized = [{"activity_name": f"Activity {i}"} for i in range(51)]
+    resp = client.post("/api/activities/export/excel/batch", json={"activities": oversized})
+    assert resp.status_code == 400
+    assert "limit exceeded" in resp.json()["detail"].lower()
+
+def test_export_customization_options(client):
+    # Test export with options excluding parent guidance and educational metadata
+    payload = {
+        "activity_name": "Wind Vane Engineering",
+        "description": "Construct a working wind direction indicator.",
+        "pre_activity": {
+            "activity_description": "Build a wind vane.",
+            "parents_note": "Assist with cutting.",
+            "parents_guide": "Stay close.",
+            "pre_activity_engagement": ["Which way is the wind blowing?"],
+            "why_how_is_this_important": "Meteorology fundamentals.",
+            "lets_get_started": "Gather materials."
+        },
+        "main_activity": {
+            "activity_step_task_title": "Assemble the vane",
+            "scenario_real_life_connection": "Airport wind socks.",
+            "in_depth_description_and_process": ["Pin straw to pencil eraser."],
+            "reflection_questions": ["Did it turn freely?"]
+        },
+        "post_activity": {
+            "whats_next": "Test outdoors.",
+            "extend_the_learning": ["Calibrate with a compass."],
+            "how_to_improvise_or_level_up": "Use heavier cardstock.",
+            "post_activity_summary": "Built an outdoor wind vane."
+        },
+        "learning_objective": "Understand aerodynamic drag.",
+        "options": {
+            "include_parent_guidance": False,
+            "include_educational_metadata": False,
+            "include_carried_forward_mappings": False,
+        }
+    }
+    resp = client.post("/api/activities/export/excel", json=payload)
+    assert resp.status_code == 200
+    assert len(resp.content) > 1000
+
+    import openpyxl
+    import io
+    wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+    sheet = wb.active
+    cell_values = [sheet.cell(row=r, column=1).value for r in range(1, sheet.max_row + 1)]
+    # Parent guidance and educational metadata should be omitted
+    assert "PARENT'S NOTE" not in [str(v).upper() for v in cell_values]
+    assert "6. EDUCATIONAL METADATA & RESOURCES" not in cell_values
+
+def test_legacy_activity_export(client):
+    # Test that legacy activities with only flat title/instructions/expected_output export cleanly
+    legacy_payload = {
+        "title": "Legacy Cloud Identification",
+        "description": "Observe and record cloud types.",
+        "instructions": "1. Look out the window.\n2. Compare shapes to cloud chart.\n3. Note cumulus vs stratus.",
+        "expected_output": "Completed cloud observation log",
+        "age_min": 7,
+        "age_max": 9,
+        "estimated_duration": 20,
+    }
+    resp = client.post("/api/activities/export/excel", json=legacy_payload)
+    assert resp.status_code == 200
+    assert len(resp.content) > 1000
+
+def test_review_session_store_ttl_and_capacity():
+    from datetime import datetime, timedelta
+    from apps.api.services.activity_ideation.review_session_store import ActivityReviewSessionStore, MAX_SESSIONS
+
+    # 1. Test creation
+    session = ActivityReviewSessionStore.create("TOP-TEST", {
+        "concepts": [],
+        "generated_count": 0,
+        "duplicate_count": 0,
+        "rejected_count": 0,
+        "rejected_candidates": [],
+    })
+    assert ActivityReviewSessionStore.get(session.session_id) is not None
+
+    # 2. Test TTL expiration
+    session.created_at = datetime.now() - timedelta(hours=25)
+    # On next get or create, it should be pruned
+    pruned = ActivityReviewSessionStore.get(session.session_id)
+    assert pruned is None
+
+    # 3. Test capacity pruning (cannot exceed MAX_SESSIONS)
+    created_sessions = []
+    for i in range(MAX_SESSIONS + 15):
+        s = ActivityReviewSessionStore.create(f"TOP-{i}", {
+            "concepts": [],
+            "generated_count": 0,
+            "duplicate_count": 0,
+            "rejected_count": 0,
+            "rejected_candidates": [],
+        })
+        created_sessions.append(s.session_id)
+
+    assert len(ActivityReviewSessionStore._sessions) <= MAX_SESSIONS
+
+
+

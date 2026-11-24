@@ -19,6 +19,9 @@ from apps.api.models.domain import (
     ActivityStatus,
     RelationshipType,
     TopicStatus,
+    PreActivity,
+    MainActivity,
+    PostActivity,
 )
 from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.ai.orchestrator import AIOrchestrator
@@ -143,10 +146,25 @@ class ActivityIdeationService:
         if primary_skill_id and topic_skill_pairs and (primary_skill_id, primary_sub_skill_id) not in topic_skill_pairs:
             return None, "Primary skill mapping is not supported by the selected topic"
 
+        mappings = topic_context.get("mappings") or {}
+        user_sel = mappings.get("user_selected") or {}
+        sugg = mappings.get("suggested") or {}
+        top = topic_context["topic"]
+
         concept = {
             "concept_id": f"ACT-CON-{uuid.uuid4().hex[:8].upper()}",
-            "topic_id": topic_context["topic"].topic_id,
-            "topic_title": topic_context["topic"].topic,
+            "topic_id": top.topic_id,
+            "topic_title": top.topic,
+            "topic_family_name": topic_context.get("topic_family_name"),
+            "country_context": getattr(top, "country_context", None),
+            "keywords": topic_context.get("keywords") or [],
+            "mappings": mappings,
+            "user_selected_intelligence": user_sel.get("intelligence") or getattr(top, "user_selected_intelligence", None),
+            "user_selected_skills": user_sel.get("skills") or getattr(top, "user_selected_skills", []) or [],
+            "user_selected_sub_skills": user_sel.get("sub_skills") or getattr(top, "user_selected_sub_skills", []) or [],
+            "suggested_intelligence": sugg.get("intelligence") or getattr(top, "suggested_intelligence", None),
+            "suggested_skills": sugg.get("skills") or getattr(top, "suggested_skills", []) or [],
+            "suggested_sub_skills": sugg.get("sub_skills") or getattr(top, "suggested_sub_skills", []) or [],
             "activity_title": candidate.activity_title.strip(),
             "activity_type_id": resolved_ids["activity_type_id"],
             "activity_concept": candidate.activity_concept.strip(),
@@ -164,9 +182,9 @@ class ActivityIdeationService:
             "assessment_criteria": candidate.assessment_criteria,
             "estimated_duration": candidate.estimated_duration,
             "difficulty_level": candidate.difficulty_level,
-            "age_min": topic_context["topic"].age_min,
-            "age_max": topic_context["topic"].age_max,
-            "target_class": topic_context["topic"].target_class,
+            "age_min": top.age_min,
+            "age_max": top.age_max,
+            "target_class": top.target_class,
             "activity_name": candidate.activity_name.strip(),
             "activity_duration": candidate.activity_duration.strip(),
             "pre_activity": candidate.pre_activity.model_dump(mode="json"),
@@ -201,6 +219,13 @@ class ActivityIdeationService:
             "Avoid repetitive or generic text and never ask children to do unsafe tasks. Do not invent "
             "skill IDs, skills, sub-skills, or activity types; use only supplied values."
         )
+        mappings = topic_context.get("mappings") or {}
+        user_sel = mappings.get("user_selected") or {}
+        sugg = mappings.get("suggested") or {}
+        target_intel = user_sel.get("intelligence") or sugg.get("intelligence") or getattr(topic, "user_selected_intelligence", None) or getattr(topic, "suggested_intelligence", None) or "Multidisciplinary"
+        target_skills = user_sel.get("skills") or sugg.get("skills") or getattr(topic, "user_selected_skills", None) or getattr(topic, "suggested_skills", None) or []
+        target_sub_skills = user_sel.get("sub_skills") or sugg.get("sub_skills") or getattr(topic, "user_selected_sub_skills", None) or getattr(topic, "suggested_sub_skills", None) or []
+
         prompt = f"""
 Generate exactly {requested_count} distinct complete OCTAKIDZ activities for this approved topic.
 
@@ -212,6 +237,11 @@ Class/grade range: {topic.target_class or "Not specified"}
 Country/context: {topic.country_context or "Not specified"}
 Topic family: {topic_context["topic_family_name"]}
 Keywords: {", ".join(topic_context["keywords"])}
+
+Carried-forward Intelligence & Skill Parameters:
+- Target Intelligence: {target_intel}
+- Target Focus Skills: {", ".join(target_skills) if target_skills else "Practical observation & creative inquiry"}
+- Target Focus Sub-skills: {", ".join(target_sub_skills) if target_sub_skills else "Application & synthesis"}
 
 Supported topic skill mappings:
 {mapped_skills}
@@ -415,6 +445,136 @@ educational metadata. Do not put these metadata in place of any template content
         session.concepts[concept_id] = replacement
         return self._format_concept(replacement)
 
+    def regenerate_concept_section(
+        self,
+        session_id: str,
+        concept_id: str,
+        section: str,
+    ) -> ActivityConceptResponse:
+        session, concept = self._get_temporary_concept(session_id, concept_id)
+        _, topic_context = self._require_eligible_topic(session.topic_id)
+        topic = topic_context["topic"]
+
+        activity_name = concept.get("activity_name") or concept.get("activity_title") or topic.topic
+        activity_duration = concept.get("activity_duration") or "30 minutes"
+
+        mappings = topic_context.get("mappings") or {}
+        user_sel = mappings.get("user_selected") or {}
+        sugg = mappings.get("suggested") or {}
+        target_intel = user_sel.get("intelligence") or sugg.get("intelligence") or getattr(topic, "user_selected_intelligence", None) or getattr(topic, "suggested_intelligence", None) or "Multidisciplinary"
+        target_skills = user_sel.get("skills") or sugg.get("skills") or getattr(topic, "user_selected_skills", None) or getattr(topic, "suggested_skills", None) or []
+        target_sub_skills = user_sel.get("sub_skills") or sugg.get("sub_skills") or getattr(topic, "user_selected_sub_skills", None) or getattr(topic, "suggested_sub_skills", None) or []
+
+        common_context = f"""
+Approved Topic: {topic.topic}
+Age range: {topic.age_min}-{topic.age_max} years
+Target class: {topic.target_class or "Not specified"}
+Country/context: {topic.country_context or "Not specified"}
+Topic family: {topic_context["topic_family_name"]}
+Keywords: {", ".join(topic_context["keywords"])}
+Educational Focus:
+- Target Intelligence: {target_intel}
+- Target Skills: {", ".join(target_skills) if target_skills else "Practical inquiry"}
+- Target Sub-skills: {", ".join(target_sub_skills) if target_sub_skills else "Application & synthesis"}
+
+Activity Name: {activity_name}
+Activity Duration: {activity_duration}
+"""
+
+        if section == "pre_activity":
+            system_prompt = (
+                "You are an expert OCTAKIDZ curriculum designer. Return only JSON matching the PreActivity schema. "
+                "Use simple, child-friendly language. Parent's Note is mandatory explaining assistance needed. "
+                "Include Parent's Guide only if special safety/supervision is required (otherwise null). "
+                "Pre-Activity Engagement must contain 0 to 3 warm-up prompts. "
+                "Pre-activity must prepare learners for the activity."
+            )
+            prompt = f"""
+{common_context}
+
+Regenerate a fresh, high-quality, creative PRE-ACTIVITY section for this activity:
+- activity_description: engaging overview of what the learner will do.
+- parents_note: practical note for parents/mentors on assistance.
+- parents_guide: step-by-step guidance only when adult supervision/tools are needed, else null.
+- pre_activity_engagement: list of 0-3 quick questions or warm-up mini-tasks.
+- why_how_is_this_important: child-friendly explanation of why this topic matters.
+- lets_get_started: motivating call-to-action prompt.
+"""
+            res: PreActivity = self.ai.generate_structured(
+                generation_type="activity_section_regeneration",
+                prompt=prompt,
+                schema_model=PreActivity,
+                system_prompt=system_prompt,
+                prompt_version="v3.0",
+                metadata={"topic_id": topic.topic_id, "section": section, "concept_id": concept_id},
+            )
+            concept["pre_activity"] = res.model_dump()
+            concept["activity_concept"] = res.activity_description
+            concept["why_engaging"] = res.why_how_is_this_important
+
+        elif section == "main_activity":
+            pre_summary = concept.get("pre_activity", {}).get("activity_description", "")
+            system_prompt = (
+                "You are an expert OCTAKIDZ curriculum designer. Return only JSON matching the MainActivity schema. "
+                "Provide at least three ordered, child-friendly actionable steps in in_depth_description_and_process. "
+                "Provide at least two thoughtful reflection questions."
+            )
+            prompt = f"""
+{common_context}
+Pre-activity Context: {pre_summary}
+
+Regenerate a fresh, step-by-step, engaging MAIN ACTIVITY section for this activity:
+- activity_step_task_title: clear title for the core activity task.
+- scenario_real_life_connection: optional real-world situation/connection, or null.
+- in_depth_description_and_process: at least 3 detailed, clear steps guiding the learner through execution.
+- reflection_questions: at least 2 questions encouraging critical thinking and self-reflection.
+"""
+            res: MainActivity = self.ai.generate_structured(
+                generation_type="activity_section_regeneration",
+                prompt=prompt,
+                schema_model=MainActivity,
+                system_prompt=system_prompt,
+                prompt_version="v3.0",
+                metadata={"topic_id": topic.topic_id, "section": section, "concept_id": concept_id},
+            )
+            concept["main_activity"] = res.model_dump()
+            concept["learner_task"] = res.activity_step_task_title
+            concept["instructions"] = res.in_depth_description_and_process
+
+        elif section == "post_activity":
+            main_steps = "\n".join(concept.get("main_activity", {}).get("in_depth_description_and_process", []))
+            system_prompt = (
+                "You are an expert OCTAKIDZ curriculum designer. Return only JSON matching the PostActivity schema. "
+                "Provide at least one follow-up task in extend_the_learning. "
+                "Include how to improvise or level up, and a concise post-activity summary."
+            )
+            prompt = f"""
+{common_context}
+Main Activity Steps Completed:
+{main_steps}
+
+Regenerate a fresh POST-ACTIVITY section extending the learning for this activity:
+- whats_next: exciting ideas on what the child can do next.
+- extend_the_learning: at least 1 extension task or challenge.
+- how_to_improvise_or_level_up: practical ways to increase difficulty or try alternatives with household items.
+- post_activity_summary: clear summary of what was accomplished and learned.
+"""
+            res: PostActivity = self.ai.generate_structured(
+                generation_type="activity_section_regeneration",
+                prompt=prompt,
+                schema_model=PostActivity,
+                system_prompt=system_prompt,
+                prompt_version="v3.0",
+                metadata={"topic_id": topic.topic_id, "section": section, "concept_id": concept_id},
+            )
+            concept["post_activity"] = res.model_dump()
+            concept["expected_output"] = res.post_activity_summary
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid section: {section}")
+
+        return self._format_concept(concept)
+
     def approve_concept(
         self,
         session_id: str,
@@ -480,6 +640,15 @@ educational metadata. Do not put these metadata in place of any template content
                 "pre_activity": concept["pre_activity"],
                 "main_activity": concept["main_activity"],
                 "post_activity": concept["post_activity"],
+                "topic_family_name": concept.get("topic_family_name"),
+                "country_context": concept.get("country_context"),
+                "keywords": concept.get("keywords", []),
+                "user_selected_intelligence": concept.get("user_selected_intelligence"),
+                "user_selected_skills": concept.get("user_selected_skills", []),
+                "user_selected_sub_skills": concept.get("user_selected_sub_skills", []),
+                "suggested_intelligence": concept.get("suggested_intelligence"),
+                "suggested_skills": concept.get("suggested_skills", []),
+                "suggested_sub_skills": concept.get("suggested_sub_skills", []),
             }
             approved_concept = {
                 "concept_id": concept_id,
@@ -509,6 +678,15 @@ educational metadata. Do not put these metadata in place of any template content
                 "pre_activity": concept["pre_activity"],
                 "main_activity": concept["main_activity"],
                 "post_activity": concept["post_activity"],
+                "topic_family_name": concept.get("topic_family_name"),
+                "country_context": concept.get("country_context"),
+                "keywords": concept.get("keywords", []),
+                "user_selected_intelligence": concept.get("user_selected_intelligence"),
+                "user_selected_skills": concept.get("user_selected_skills", []),
+                "user_selected_sub_skills": concept.get("user_selected_sub_skills", []),
+                "suggested_intelligence": concept.get("suggested_intelligence"),
+                "suggested_skills": concept.get("suggested_skills", []),
+                "suggested_sub_skills": concept.get("suggested_sub_skills", []),
             }
             entries = [
                 ("ActivityConcepts", approved_concept),
@@ -585,6 +763,8 @@ educational metadata. Do not put these metadata in place of any template content
     def list_activities(self, search: Optional[str] = None, topic_id: Optional[str] = None) -> List[dict]:
         query = (search or "").strip().lower()
         topics = {topic["topic_id"]: topic for topic in self.repo.read_sheet("Topics")}
+        topic_families = {f["topic_family_id"]: f["name"] for f in self.repo.read_sheet("TopicFamilies")}
+        topic_keywords = self.repo.read_sheet("TopicKeywords")
         skills = {skill["skill_id"]: skill for skill in self.skills}
         sub_skills = {sub["sub_skill_id"]: sub for sub in self.sub_skills}
         activity_skills = self.repo.read_sheet("ActivitySkills")
@@ -610,9 +790,39 @@ educational metadata. Do not put these metadata in place of any template content
                         "sub_skill_id": mapping["sub_skill_id"],
                         "sub_skill_name": sub_skill.get("name"),
                     })
+
+            topic_fam_name = topic.get("topic_family_name") or topic_families.get(topic.get("topic_family_id"), "General")
+            country_ctx = activity.get("country_context") or topic.get("country_context")
+            kws = activity.get("keywords") or [k["keyword"] for k in topic_keywords if k.get("topic_id") == topic.get("topic_id")]
+
+            u_intel = activity.get("user_selected_intelligence") or topic.get("user_selected_intelligence")
+            u_skills = activity.get("user_selected_skills") or topic.get("user_selected_skills") or []
+            u_sub = activity.get("user_selected_sub_skills") or topic.get("user_selected_sub_skills") or []
+
+            s_intel = activity.get("suggested_intelligence") or topic.get("suggested_intelligence")
+            s_skills = activity.get("suggested_skills") or topic.get("suggested_skills") or []
+            s_sub = activity.get("suggested_sub_skills") or topic.get("suggested_sub_skills") or []
+
+            mappings = {
+                "user_selected": {
+                    "intelligence": u_intel,
+                    "skills": u_skills,
+                    "sub_skills": u_sub,
+                },
+                "suggested": {
+                    "intelligence": s_intel,
+                    "skills": s_skills,
+                    "sub_skills": s_sub,
+                }
+            }
+
             results.append({
                 "activity": activity,
                 "topic_title": topic.get("topic", "Unknown topic"),
+                "topic_family_name": topic_fam_name,
+                "country_context": country_ctx,
+                "keywords": kws,
+                "mappings": mappings,
                 "skills": mapped_skills,
             })
 

@@ -271,6 +271,11 @@ class TopicReviewService:
         return self.transition_state(topic_id, "review", TopicStatus.REVIEW, [TopicStatus.DRAFT, TopicStatus.REJECTED])
 
     def approve_topic(self, topic_id: str) -> Tuple[bool, str]:
+        topic = self._get_topic_by_id(topic_id)
+        if not topic:
+            return False, "Topic not found"
+        if topic.status == TopicStatus.APPROVED:
+            return True, "Topic already approved"
         return self.transition_state(
             topic_id,
             "approve",

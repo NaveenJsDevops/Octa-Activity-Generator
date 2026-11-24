@@ -2,8 +2,34 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, Sparkles, Loader2, AlertCircle, X, Check, Globe, CheckCircle, ArrowRight, UserCheck, Brain, Compass } from "lucide-react";
-import { discoverTopics, keepCandidate, rejectCandidate, keepAllCandidates, TopicDiscoveryRequest, TopicDiscoveryResult } from "@/lib/api/topicDiscovery";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Search,
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  X,
+  Check,
+  Globe,
+  CheckCircle,
+  ArrowRight,
+  UserCheck,
+  Compass,
+  Edit3,
+  RotateCcw,
+  ExternalLink,
+} from "lucide-react";
+import {
+  discoverTopics,
+  keepCandidate,
+  rejectCandidate,
+  keepAllCandidates,
+  editCandidate,
+  TopicDiscoveryRequest,
+  TopicDiscoveryResult,
+} from "@/lib/api/topicDiscovery";
+import { API_BASE_URL } from "@/lib/apiBase";
 import {
   fetchMasterData,
   DEFAULT_INTELLIGENCES,
@@ -14,6 +40,22 @@ import {
   MasterSubSkill,
   MasterTopicFamily,
 } from "@/lib/apiCache";
+
+const FORM_STORAGE_KEY = "octa_topic_form_state_v1";
+
+interface SavedFormState {
+  searchText: string;
+  keywords: string[];
+  ageMin: number;
+  ageMax: number;
+  targetClass: string;
+  topicFamilyId: string;
+  countryContext: string;
+  requestedCount: number;
+  selectedIntelligenceId: string;
+  selectedSkillId: string;
+  selectedSubSkillId: string;
+}
 
 const TOPIC_FAMILIES: MasterTopicFamily[] = [
   { topic_family_id: "tf-001", name: "Space Exploration" },
@@ -38,10 +80,12 @@ interface TopicDiscoveryPanelProps {
 }
 
 export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }: TopicDiscoveryPanelProps) {
+  const router = useRouter();
+
+  // Form states
   const [searchText, setSearchText] = useState("");
   const [keywordInput, setKeywordInput] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
-
   const [ageMin, setAgeMin] = useState(10);
   const [ageMax, setAgeMax] = useState(12);
   const [targetClass, setTargetClass] = useState<string>("Grade 9");
@@ -59,15 +103,91 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [selectedSubSkillId, setSelectedSubSkillId] = useState("");
 
+  const [isHydrated, setIsHydrated] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
+  // Session & candidates
   const [session, setSession] = useState<TopicDiscoveryResult | null>(null);
   const [candidateStatuses, setCandidateStatuses] = useState<Record<number, "PENDING" | "KEPT" | "REJECTED" | "ERROR">>({});
   const [candidateErrors, setCandidateErrors] = useState<Record<number, string>>({});
+  const [keptTopicMap, setKeptTopicMap] = useState<Record<number, string>>({});
+  const [approvingTopicId, setApprovingTopicId] = useState<string | null>(null);
 
-  const [showResearch, setShowResearch] = useState(false);
+  // In-place editing state
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editTopic, setEditTopic] = useState("");
+  const [editShortDescription, setEditShortDescription] = useState("");
+  const [editFullDescription, setEditFullDescription] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editedIndices, setEditedIndices] = useState<Record<number, boolean>>({});
 
+  // Web Sources Modal state
+  const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
+
+  // 1. Restore form state from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(FORM_STORAGE_KEY);
+      if (raw) {
+        const data: Partial<SavedFormState> = JSON.parse(raw);
+        if (typeof data.searchText === "string") setSearchText(data.searchText);
+        if (Array.isArray(data.keywords)) setKeywords(data.keywords);
+        if (typeof data.ageMin === "number") setAgeMin(data.ageMin);
+        if (typeof data.ageMax === "number") setAgeMax(data.ageMax);
+        if (typeof data.targetClass === "string") setTargetClass(data.targetClass);
+        if (typeof data.topicFamilyId === "string") setTopicFamilyId(data.topicFamilyId);
+        if (typeof data.countryContext === "string") setCountryContext(data.countryContext);
+        if (typeof data.requestedCount === "number") setRequestedCount(data.requestedCount);
+        if (typeof data.selectedIntelligenceId === "string") setSelectedIntelligenceId(data.selectedIntelligenceId);
+        if (typeof data.selectedSkillId === "string") setSelectedSkillId(data.selectedSkillId);
+        if (typeof data.selectedSubSkillId === "string") setSelectedSubSkillId(data.selectedSubSkillId);
+      }
+    } catch (err) {
+      console.error("Failed to restore topic form state from sessionStorage:", err);
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  // 2. Persist form state to sessionStorage whenever inputs change (after hydration)
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      const stateToSave: SavedFormState = {
+        searchText,
+        keywords,
+        ageMin,
+        ageMax,
+        targetClass,
+        topicFamilyId,
+        countryContext,
+        requestedCount,
+        selectedIntelligenceId,
+        selectedSkillId,
+        selectedSubSkillId,
+      };
+      sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch (err) {
+      console.error("Failed to persist topic form state to sessionStorage:", err);
+    }
+  }, [
+    isHydrated,
+    searchText,
+    keywords,
+    ageMin,
+    ageMax,
+    targetClass,
+    topicFamilyId,
+    countryContext,
+    requestedCount,
+    selectedIntelligenceId,
+    selectedSkillId,
+    selectedSubSkillId,
+  ]);
+
+  // Load master data
   useEffect(() => {
     fetchMasterData()
       .then(data => {
@@ -97,10 +217,17 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
     return intelligences.find(i => i.intelligence_id === selectedIntelligenceId)?.name;
   }, [intelligences, selectedIntelligenceId]);
 
+  const selectedSkillName = useMemo(() => {
+    return skills.find(s => s.skill_id === selectedSkillId)?.name;
+  }, [skills, selectedSkillId]);
+
+  const selectedSubSkillName = useMemo(() => {
+    return subSkills.find(ss => ss.sub_skill_id === selectedSubSkillId)?.name;
+  }, [subSkills, selectedSubSkillId]);
+
   const handleIntelligenceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newIntelId = e.target.value;
     setSelectedIntelligenceId(newIntelId);
-    // If the currently selected skill does not belong to the newly selected intelligence, clear it
     if (newIntelId && selectedSkillId) {
       const currentSkill = skills.find(s => s.skill_id === selectedSkillId);
       if (currentSkill && currentSkill.intelligence_id !== newIntelId) {
@@ -143,18 +270,31 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
     setSelectedSubSkillId("");
   };
 
-  const selectedSkillName = useMemo(() => {
-    return skills.find(s => s.skill_id === selectedSkillId)?.name;
-  }, [skills, selectedSkillId]);
-
-  const selectedSubSkillName = useMemo(() => {
-    return subSkills.find(ss => ss.sub_skill_id === selectedSubSkillId)?.name;
-  }, [subSkills, selectedSubSkillId]);
+  const handleResetForm = () => {
+    setSearchText("");
+    setKeywordInput("");
+    setKeywords([]);
+    setAgeMin(10);
+    setAgeMax(12);
+    setTargetClass("Grade 9");
+    setCountryContext("India");
+    setRequestedCount(1);
+    setTopicFamilyId("");
+    setSelectedIntelligenceId("");
+    setSelectedSkillId("");
+    setSelectedSubSkillId("");
+    setError("");
+    try {
+      sessionStorage.removeItem(FORM_STORAGE_KEY);
+    } catch (err) {
+      console.error("Failed to clear form sessionStorage:", err);
+    }
+  };
 
   const handleAddKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      const val = keywordInput.trim().replace(/,$/, '');
+      const val = keywordInput.trim().replace(/,$/, "");
       if (val && !keywords.includes(val)) {
         setKeywords([...keywords, val]);
       }
@@ -167,11 +307,10 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   };
 
   const handleGenerate = async () => {
-    // Use searchText as a keyword if no keywords were added
     const effectiveKeywords = keywords.length > 0 ? keywords : (searchText.trim() ? [searchText.trim()] : []);
 
     if (effectiveKeywords.length === 0) {
-      setError("Please describe the kind of activity you're looking for.");
+      setError("Please describe the kind of activity you're looking for or add keywords.");
       return;
     }
 
@@ -185,7 +324,9 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
     setSession(null);
     setCandidateStatuses({});
     setCandidateErrors({});
-    setShowResearch(false);
+    setKeptTopicMap({});
+    setEditingIndex(null);
+    setEditedIndices({});
 
     try {
       const request: TopicDiscoveryRequest = {
@@ -216,14 +357,53 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
     }
   };
 
+  const handleApproveAndGenerate = async (topicId: string) => {
+    setApprovingTopicId(topicId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}/approve`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to approve topic");
+      }
+      router.push(`/activities?topic_id=${topicId}`);
+    } catch (err: any) {
+      alert(err.message || "Approval failed");
+      setApprovingTopicId(null);
+    }
+  };
+
   const handleKeep = async (index: number) => {
     if (!session) return;
     try {
       setCandidateStatuses(prev => ({ ...prev, [index]: "PENDING" }));
-      await keepCandidate(session.session_id, index);
+      const res = await keepCandidate(session.session_id, index);
+      const topicId = res?.topic?.topic_id;
+      if (topicId) {
+        setKeptTopicMap(prev => ({ ...prev, [index]: topicId }));
+      }
       setCandidateStatuses(prev => ({ ...prev, [index]: "KEPT" }));
       setCandidateErrors(prev => ({ ...prev, [index]: "" }));
       onTopicsGenerated();
+    } catch (err: any) {
+      setCandidateStatuses(prev => ({ ...prev, [index]: "ERROR" }));
+      setCandidateErrors(prev => ({ ...prev, [index]: err.message || "Validation/Duplicate error" }));
+    }
+  };
+
+  const handleKeepAndGenerate = async (index: number) => {
+    if (!session) return;
+    try {
+      setCandidateStatuses(prev => ({ ...prev, [index]: "PENDING" }));
+      const res = await keepCandidate(session.session_id, index);
+      const topicId = res?.topic?.topic_id;
+      if (!topicId) throw new Error("Topic saved but no topic ID was returned");
+      setKeptTopicMap(prev => ({ ...prev, [index]: topicId }));
+      setCandidateStatuses(prev => ({ ...prev, [index]: "KEPT" }));
+      setCandidateErrors(prev => ({ ...prev, [index]: "" }));
+      onTopicsGenerated();
+      await handleApproveAndGenerate(topicId);
     } catch (err: any) {
       setCandidateStatuses(prev => ({ ...prev, [index]: "ERROR" }));
       setCandidateErrors(prev => ({ ...prev, [index]: err.message || "Validation/Duplicate error" }));
@@ -247,16 +427,21 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
       const res = await keepAllCandidates(session.session_id);
       const newStatuses = { ...candidateStatuses };
       const newErrors = { ...candidateErrors };
+      const newKeptMap = { ...keptTopicMap };
       res.results.forEach((r: any) => {
         const idx = r.index;
         if (r.status === "kept") {
           newStatuses[idx] = "KEPT";
           newErrors[idx] = "";
+          if (r.topic?.topic_id) {
+            newKeptMap[idx] = r.topic.topic_id;
+          }
         } else {
           newStatuses[idx] = "ERROR";
           newErrors[idx] = r.reason;
         }
       });
+      setKeptTopicMap(newKeptMap);
       setCandidateStatuses(newStatuses);
       setCandidateErrors(newErrors);
       onTopicsGenerated();
@@ -265,12 +450,83 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
     }
   };
 
+  // In-place candidate editing handlers
+  const handleStartEdit = (index: number) => {
+    if (!session || !session.candidates[index]) return;
+    const c = session.candidates[index];
+    setEditingIndex(index);
+    setEditTopic(c.topic || "");
+    setEditShortDescription(c.short_description || "");
+    setEditFullDescription(c.full_description || "");
+    setEditError("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditTopic("");
+    setEditShortDescription("");
+    setEditFullDescription("");
+    setEditError("");
+  };
+
+  const handleSaveEdit = async (index: number) => {
+    if (!session) return;
+    if (!editTopic.trim()) {
+      setEditError("Topic title cannot be empty.");
+      return;
+    }
+    if (!editShortDescription.trim()) {
+      setEditError("Short description cannot be empty.");
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError("");
+    try {
+      await editCandidate(session.session_id, index, {
+        topic: editTopic.trim(),
+        short_description: editShortDescription.trim(),
+        full_description: editFullDescription.trim() || undefined,
+      });
+
+      // Update in-place in session state
+      const updatedCandidates = [...session.candidates];
+      updatedCandidates[index] = {
+        ...updatedCandidates[index],
+        topic: editTopic.trim(),
+        short_description: editShortDescription.trim(),
+        full_description: editFullDescription.trim() || updatedCandidates[index].full_description,
+      };
+      setSession({
+        ...session,
+        candidates: updatedCandidates,
+      });
+      setEditedIndices(prev => ({ ...prev, [index]: true }));
+      setEditingIndex(null);
+    } catch (err: any) {
+      setEditError(err.message || "Failed to save edits");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Discover Activity Topics</h1>
-        <p className="text-slate-500 mt-1.5 text-[15px]">Describe the kind of activity you want and refine it with a few details.</p>
+      {/* Page header with Reset Form action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Discover Activity Topics</h1>
+          <p className="text-slate-500 mt-1.5 text-[15px]">Describe the kind of activity you want and refine it with a few details.</p>
+        </div>
+        <button
+          onClick={handleResetForm}
+          type="button"
+          className="self-start sm:self-auto px-3.5 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+          title="Reset all form fields to default"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Reset Form</span>
+        </button>
       </div>
 
       {/* Error banner */}
@@ -294,7 +550,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
               type="text"
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleGenerate()}
+              onKeyDown={e => e.key === "Enter" && handleGenerate()}
               placeholder="e.g. A creative space activity where Grade 6 students design a Mars survival solution"
               disabled={generating}
               className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] transition-all"
@@ -314,12 +570,11 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                 value={keywordInput}
                 onChange={e => setKeywordInput(e.target.value)}
                 onKeyDown={handleAddKeyword}
-                placeholder={keywords.length === 0 ? "Type and press Enter, e.g. space, teamwork, design" : "Add another..."}
+                placeholder={keywords.length === 0 ? "Type and press Enter, e.g. space, teamwork" : "Add another..."}
                 disabled={generating}
                 className="flex-1 min-w-[140px] bg-transparent outline-none text-sm text-slate-700 placeholder-slate-400"
               />
             </div>
-            {/* Keyword chips */}
             {keywords.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {keywords.map(kw => (
@@ -509,7 +764,7 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
         <p className="text-xs text-slate-400">All fields stay together as one search experience. Search text drives discovery; filters narrow the result.</p>
       </div>
 
-      {/* Discover button — centered below the card */}
+      {/* Discover button */}
       <div className="flex justify-center">
         <button
           onClick={handleGenerate}
@@ -538,22 +793,23 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
       {/* SESSION CANDIDATES SECTION */}
       {session && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div>
               <h2 className="text-2xl font-bold text-slate-900">Discovered Topics</h2>
               <p className="text-slate-500 text-sm mt-0.5">Review the AI-generated topics before adding them to your Topic Library.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => setShowResearch(!showResearch)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-50 bg-white"
+                onClick={() => setIsSourcesModalOpen(true)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-50 bg-white shadow-2xs"
+                title="View external web research sources"
               >
-                <Globe className="w-4 h-4" />
-                {showResearch ? "Hide Sources" : "View Web Sources"}
+                <Globe className="w-4 h-4 text-[#5B50F5]" />
+                <span>View Web Sources ({session.research_sources?.length || 0})</span>
               </button>
               <button
                 onClick={handleKeepAll}
-                className="px-4 py-2 bg-[#ECEFFE] text-[#5B50F5] border border-[#d4d0fc] rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-[#e0dcfd]"
+                className="px-4 py-2 bg-[#ECEFFE] text-[#5B50F5] border border-[#d4d0fc] rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-[#e0dcfd] shadow-2xs"
               >
                 <Check className="w-4 h-4" />
                 Keep All Valid
@@ -561,25 +817,12 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
             </div>
           </div>
 
-          {showResearch && session.research_sources && (
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 text-sm">
-              <h4 className="font-semibold text-slate-800 mb-3">Web Research Sources</h4>
-              <ul className="space-y-3">
-                {session.research_sources.map((s, i) => (
-                  <li key={i} className="flex flex-col">
-                    <a href={s.url} target="_blank" rel="noreferrer" className="text-[#5B50F5] hover:underline font-medium">{s.title}</a>
-                    <span className="text-slate-500 mt-0.5 line-clamp-2 text-xs">{s.snippet}</span>
-                  </li>
-                ))}
-                {session.research_sources.length === 0 && <li className="text-slate-400">No web results were found.</li>}
-              </ul>
-            </div>
-          )}
-
           <div className="space-y-3">
             {session.candidates.map((c, i) => {
               const status = candidateStatuses[i];
               const err = candidateErrors[i];
+              const isEditing = editingIndex === i;
+              const isEdited = !!editedIndices[i];
 
               if (status === "REJECTED") {
                 return (
@@ -593,17 +836,92 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
               return (
                 <div
                   key={i}
-                  className={`bg-white rounded-2xl border p-5 shadow-sm flex justify-between items-start gap-4 ${
+                  className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col md:flex-row justify-between items-start gap-4 ${
                     status === "KEPT"
-                      ? "border-emerald-200 bg-emerald-50"
+                      ? "border-emerald-200 bg-emerald-50/50"
                       : status === "ERROR"
-                      ? "border-red-200 bg-red-50"
+                      ? "border-red-200 bg-red-50/50"
                       : "border-slate-200"
                   }`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-slate-900 text-[15px]">{c.topic}</h4>
-                    <p className="text-slate-500 text-sm mt-1 line-clamp-2">{c.short_description}</p>
+                  <div className="flex-1 min-w-0 w-full">
+                    {/* Candidate header or inline editor */}
+                    {isEditing ? (
+                      <div className="space-y-3 p-4 bg-indigo-50/40 rounded-xl border border-indigo-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#5B50F5] uppercase tracking-wider flex items-center gap-1.5">
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Edit Topic Candidate
+                          </span>
+                          {editError && <span className="text-xs text-red-600 font-medium">{editError}</span>}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Topic Title *</label>
+                          <input
+                            type="text"
+                            value={editTopic}
+                            onChange={e => setEditTopic(e.target.value)}
+                            disabled={savingEdit}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
+                            placeholder="Topic title..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Short Description *</label>
+                          <textarea
+                            rows={2}
+                            value={editShortDescription}
+                            onChange={e => setEditShortDescription(e.target.value)}
+                            disabled={savingEdit}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
+                            placeholder="Brief summary..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">Full Description (Optional)</label>
+                          <textarea
+                            rows={3}
+                            value={editFullDescription}
+                            onChange={e => setEditFullDescription(e.target.value)}
+                            disabled={savingEdit}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#5B50F5]"
+                            placeholder="Detailed topic description..."
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            disabled={savingEdit}
+                            className="px-3 py-1.5 border border-slate-300 text-slate-600 bg-white rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(i)}
+                            disabled={savingEdit}
+                            className="px-4 py-1.5 bg-[#5B50F5] hover:bg-[#4740d4] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                          >
+                            {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                            <span>Save Changes</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-slate-900 text-[15px]">{c.topic}</h4>
+                          {isEdited && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">
+                              Edited
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-slate-500 text-sm mt-1 line-clamp-2">{c.short_description}</p>
+                      </>
+                    )}
+
                     <div className="flex items-center gap-3 mt-3 text-xs flex-wrap">
                       <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-medium">Age: {c.age_suitability}</span>
                       <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full border border-amber-200 font-medium">
@@ -697,23 +1015,77 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                   </div>
 
                   {status === "PENDING" || status === "ERROR" ? (
-                    <div className="flex gap-2 shrink-0 mt-0.5">
+                    <div className="flex flex-wrap gap-2 shrink-0 mt-0.5">
                       <button
-                        onClick={() => handleKeep(i)}
-                        className="px-4 py-2 bg-[#5B50F5] hover:bg-[#4740d4] text-white rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors"
+                        onClick={() => handleKeepAndGenerate(i)}
+                        disabled={approvingTopicId !== null || isEditing}
+                        className="px-3.5 py-2 bg-[#5B50F5] hover:bg-[#4740d4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                        title="Keep this topic, approve it, and generate activities immediately"
                       >
-                        <Check className="w-4 h-4" /> Keep
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Keep &amp; Generate Activities →</span>
                       </button>
                       <button
-                        onClick={() => handleReject(i)}
-                        className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors"
+                        onClick={() => handleKeep(i)}
+                        disabled={approvingTopicId !== null || isEditing}
+                        className="px-3 py-2 border border-indigo-200 hover:bg-indigo-50 text-[#5B50F5] bg-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-2xs"
+                        title="Save to Topic Library as Draft"
                       >
-                        <X className="w-4 h-4" /> Reject
+                        <Check className="w-3.5 h-3.5" /> Keep
+                      </button>
+                      {!isEditing && (
+                        <button
+                          onClick={() => handleStartEdit(i)}
+                          disabled={approvingTopicId !== null}
+                          className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 bg-white rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-2xs"
+                          title="Edit candidate title and description in place"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" /> Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleReject(i)}
+                        disabled={approvingTopicId !== null || isEditing}
+                        className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 shadow-2xs"
+                      >
+                        <X className="w-3.5 h-3.5" /> Reject
                       </button>
                     </div>
                   ) : status === "KEPT" ? (
-                    <div className="flex items-center gap-2 text-emerald-700 text-sm font-semibold shrink-0 bg-emerald-100 px-4 py-2 rounded-xl">
-                      <CheckCircle className="w-4 h-4" /> Saved
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-semibold bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Saved</span>
+                        {keptTopicMap[i] && (
+                          <span className="font-mono text-[10px] text-emerald-600">({keptTopicMap[i]})</span>
+                        )}
+                      </div>
+                      {keptTopicMap[i] && (
+                        <button
+                          onClick={() => handleApproveAndGenerate(keptTopicMap[i])}
+                          disabled={approvingTopicId === keptTopicMap[i]}
+                          className="px-3.5 py-2 bg-[#5B50F5] hover:bg-[#4740d4] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                          title="Approve this topic and proceed immediately to Activity Generation"
+                        >
+                          {approvingTopicId === keptTopicMap[i] ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Approving &amp; Launching...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>Approve &amp; Generate Activities →</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                      <Link
+                        href="/topics/library"
+                        className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 bg-white rounded-xl text-xs font-semibold transition-colors shadow-2xs"
+                      >
+                        View in Topic Library
+                      </Link>
                     </div>
                   ) : null}
                 </div>
@@ -725,6 +1097,97 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                 All candidates have been rejected. Try adjusting your keywords and generating again.
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Web Sources Modal */}
+      {isSourcesModalOpen && session && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[#5B50F5]">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Web Research Sources</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Verified external web references consulted during AI topic discovery
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSourcesModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 overflow-y-auto space-y-3.5">
+              {session.research_sources && session.research_sources.length > 0 ? (
+                session.research_sources.map((s, idx) => {
+                  let domain = "";
+                  try {
+                    if (s.url) domain = new URL(s.url).hostname.replace(/^www\./, "");
+                  } catch {}
+                  return (
+                    <div key={idx} className="p-4 rounded-xl border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/20 transition-all space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <h4 className="font-semibold text-slate-900 text-sm leading-snug">
+                          {s.title || "Web Source"}
+                        </h4>
+                        {domain && (
+                          <span className="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                            {domain}
+                          </span>
+                        )}
+                      </div>
+                      {s.snippet && (
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          {s.snippet}
+                        </p>
+                      )}
+                      {s.url && (
+                        <div className="pt-1">
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5B50F5] hover:text-[#4740d4] hover:underline"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate max-w-md">{s.url}</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12 px-4 space-y-2">
+                  <Globe className="w-10 h-10 text-slate-300 mx-auto" />
+                  <h4 className="text-sm font-semibold text-slate-700">No Web Sources Available</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    This topic was generated using core pedagogical models without external web search citations.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+              <button
+                onClick={() => setIsSourcesModalOpen(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-semibold rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
