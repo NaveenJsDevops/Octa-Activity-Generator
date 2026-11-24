@@ -6,7 +6,16 @@ import os
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 ENV_PATH = PROJECT_ROOT / "apps" / "api" / ".env"
 
-GEMINI_MODEL = "gemini-3.1-flash-lite"
+GEMINI_MODEL = "gemini-flash-lite-latest"
+SUPPORTED_GEMINI_MODELS = [
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+]
+SUPPORTED_OPENAI_MODELS = [
+    "gpt-4o-mini",
+    "gpt-4o",
+]
 
 
 class Settings(BaseSettings):

@@ -79,6 +79,23 @@ class GeminiProvider(AIProvider):
                 duration_ms=None 
             )
         except Exception as e:
+            err_str = str(e).lower()
+            if ("503" in err_str or "high demand" in err_str or "overloaded" in err_str or "404" in err_str) and self.model != "gemini-flash-lite-latest":
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gemini-flash-lite-latest",
+                        messages=messages,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                    )
+                    return AIResponse(
+                        content=response.choices[0].message.content or "",
+                        input_tokens=response.usage.prompt_tokens if response.usage else None,
+                        output_tokens=response.usage.completion_tokens if response.usage else None,
+                        duration_ms=None 
+                    )
+                except Exception:
+                    pass
             raise self._convert_error(e)
 
     def generate_structured(
@@ -121,4 +138,21 @@ class GeminiProvider(AIProvider):
                 duration_ms=None
             )
         except Exception as e:
+            err_str = str(e).lower()
+            if ("503" in err_str or "high demand" in err_str or "overloaded" in err_str or "404" in err_str) and self.model != "gemini-flash-lite-latest":
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gemini-flash-lite-latest",
+                        messages=messages,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                    )
+                    return AIResponse(
+                        content=response.choices[0].message.content or "",
+                        input_tokens=response.usage.prompt_tokens if response.usage else None,
+                        output_tokens=response.usage.completion_tokens if response.usage else None,
+                        duration_ms=None 
+                    )
+                except Exception:
+                    pass
             raise self._convert_error(e)

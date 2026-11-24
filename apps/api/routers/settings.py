@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from apps.api.core.config import settings, ENV_PATH, GEMINI_MODEL
+from apps.api.core.config import settings, ENV_PATH, GEMINI_MODEL, SUPPORTED_GEMINI_MODELS, SUPPORTED_OPENAI_MODELS
 import dotenv
 import os
 
@@ -16,11 +16,14 @@ class AIModelUpdateRequest(BaseModel):
 @router.get("/ai/models")
 def get_available_models():
     """
-    Return a list of common AI models that can be selected.
-    This can be expanded as needed.
+    Return a list of supported AI models that can be selected.
+    Includes active Gemini models and OpenAI models if configured.
     """
+    models = list(SUPPORTED_GEMINI_MODELS)
+    if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY.strip() and not settings.OPENAI_API_KEY.lower().startswith("your_"):
+        models.extend(SUPPORTED_OPENAI_MODELS)
     return {
-        "models": [GEMINI_MODEL]
+        "models": models
     }
 
 @router.get("/ai")
@@ -34,25 +37,32 @@ def get_ai_settings():
 
 @router.patch("/ai")
 def update_ai_settings(req: AIModelUpdateRequest):
-    if req.model.strip() != GEMINI_MODEL:
+    selected_model = req.model.strip()
+    
+    if selected_model in SUPPORTED_GEMINI_MODELS:
+        provider = "gemini"
+    elif selected_model in SUPPORTED_OPENAI_MODELS:
+        provider = "openai"
+    else:
+        all_models = SUPPORTED_GEMINI_MODELS + SUPPORTED_OPENAI_MODELS
         raise HTTPException(
             status_code=400,
-            detail=f"Only {GEMINI_MODEL} is available.",
+            detail=f"Model '{selected_model}' not supported. Available: {', '.join(all_models)}",
         )
 
     # Update in memory
-    settings.AI_MODEL = GEMINI_MODEL
-    settings.AI_PROVIDER = "gemini"
+    settings.AI_MODEL = selected_model
+    settings.AI_PROVIDER = provider
     
     # Update in .env file to persist
     dotenv_file = str(ENV_PATH)
     if os.path.exists(dotenv_file):
-        dotenv.set_key(dotenv_file, "AI_MODEL", GEMINI_MODEL)
-        dotenv.set_key(dotenv_file, "AI_PROVIDER", "gemini")
+        dotenv.set_key(dotenv_file, "AI_MODEL", selected_model)
+        dotenv.set_key(dotenv_file, "AI_PROVIDER", provider)
         
     return {
         "status": "success",
-        "message": "AI configuration updated successfully",
+        "message": f"AI model switched to {selected_model} ({provider})",
         "settings": {
             "provider": settings.AI_PROVIDER,
             "model": settings.AI_MODEL
