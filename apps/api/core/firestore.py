@@ -338,7 +338,10 @@ class FirestoreManager:
         if synchronous:
             _sync_worker()
         else:
-            self._executor.submit(_sync_worker)
+            try:
+                self._executor.submit(_sync_worker)
+            except RuntimeError:
+                pass
 
 
 firestore_manager = FirestoreManager.get_instance()

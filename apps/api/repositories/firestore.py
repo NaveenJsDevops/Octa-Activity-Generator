@@ -91,14 +91,37 @@ class FirestoreRepository:
 
             self._storage = FirestoreRepository._storage_by_dir[self.data_dir]
 
-            if not self._is_isolated_test and self.data_dir not in FirestoreRepository._loaded_dirs and firestore_manager.is_available:
+            # In production, initial load is triggered asynchronously by lifespan to prevent port-binding blockage
+            if (
+                not is_prod
+                and not self._is_isolated_test
+                and self.data_dir not in FirestoreRepository._loaded_dirs
+                and firestore_manager.is_available
+            ):
                 self._load_from_firestore()
                 FirestoreRepository._loaded_dirs.add(self.data_dir)
 
+    ESSENTIAL_COLLECTIONS = [
+        "Intelligences",
+        "Skills",
+        "SubSkills",
+        "TopicFamilies",
+        "ActivityTypes",
+        "Topics",
+        "TopicSkills",
+        "TopicVersions",
+        "Activities",
+        "ActivitySkills",
+        "ActivityVersions",
+    ]
+
     def _load_from_firestore(self):
-        """Loads all collections from Cloud Firestore into in-memory storage."""
+        """Loads essential collections from Cloud Firestore into in-memory storage."""
         logger.info("Initializing in-memory cache from Cloud Firestore...")
-        for sheet_name, (_, model_class, _) in COLLECTION_MAPPING.items():
+        for sheet_name in self.ESSENTIAL_COLLECTIONS:
+            if sheet_name not in COLLECTION_MAPPING:
+                continue
+            _, model_class, _ = COLLECTION_MAPPING[sheet_name]
             docs = firestore_manager.fetch_collection(sheet_name)
             valid_records = []
             for doc in docs:
@@ -107,7 +130,7 @@ class FirestoreRepository:
                     validated = model_class(**decoded).model_dump(mode="json")
                     valid_records.append(validated)
                 except Exception as e:
-                    logger.warning(f"Skipping corrupt document in {sheet_name}: {e}")
+                    logger.debug(f"Skipping corrupt document in {sheet_name}: {e}")
             self._storage[sheet_name] = valid_records
         logger.info("In-memory cache warmed up from Cloud Firestore.")
 

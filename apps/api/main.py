@@ -3,7 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any
 
 from contextlib import asynccontextmanager
+import logging
 import os
+import threading
+
+logger = logging.getLogger("octa.main")
 
 from apps.api.core.config import settings
 from apps.api.auth.security import get_current_user
@@ -23,8 +27,17 @@ async def lifespan(app: FastAPI):
     repo = FirestoreRepository(settings.DATA_DIR)
     repo.initialize_database()
     ensure_default_master_data(repo)
-    if firestore_manager.is_available and not os.getenv("PYTEST_CURRENT_TEST"):
-        firestore_manager.sync_all_to_firestore(repo, synchronous=False)
+
+    # Warm up cache and sync in background thread so Uvicorn opens port INSTANTLY
+    def _bg_warmup():
+        try:
+            if firestore_manager.is_available and not os.getenv("PYTEST_CURRENT_TEST"):
+                repo.reload_from_firestore()
+                firestore_manager.sync_all_to_firestore(repo, synchronous=False)
+        except Exception as e:
+            logger.warning(f"Background Firestore warmup notice: {e}")
+
+    threading.Thread(target=_bg_warmup, daemon=True, name="firestore-warmup").start()
     yield
 
 app = FastAPI(

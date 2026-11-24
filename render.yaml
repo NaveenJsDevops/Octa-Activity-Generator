@@ -4,10 +4,14 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r apps/api/requirements.txt
-    startCommand: uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python -m uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: ENVIRONMENT
         value: production
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHONPATH
+        value: "."
       - key: DATA_DIR
         value: data
       - key: STORAGE_DIR
