@@ -24,8 +24,8 @@ def _clean_markdown_fence(content: str) -> str:
 
 class GeminiProvider(AIProvider):
     def __init__(self):
-        self.api_key = settings.GEMINI_API_KEY
-        self.is_configured = bool(self.api_key and self.api_key.strip() and self.api_key != "YOUR_GEMINI_API_KEY_HERE")
+        self.api_key = (settings.GEMINI_API_KEY or "").strip()
+        self.is_configured = bool(self.api_key and self.api_key != "YOUR_GEMINI_API_KEY_HERE")
         
         if self.is_configured:
             kwargs = {
@@ -43,10 +43,10 @@ class GeminiProvider(AIProvider):
 
     def _convert_error(self, e: Exception) -> Exception:
         if isinstance(e, OpenAITimeoutError):
-            return AITimeoutError(f"OpenAI request timed out: {str(e)}")
+            return AITimeoutError(f"Gemini request timed out: {str(e)}")
         elif isinstance(e, OpenAIError):
-            return AIProviderError(f"OpenAI API error: {str(e)}")
-        return AIProviderError(f"Unexpected AI error: {str(e)}")
+            return AIProviderError(f"Gemini API error: {str(e)}")
+        return AIProviderError(f"Unexpected Gemini error: {str(e)}")
 
     def generate_unstructured(
         self, 

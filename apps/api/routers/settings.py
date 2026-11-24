@@ -76,8 +76,8 @@ def test_ai_connection():
     orchestrator = AIOrchestrator(repo)
     
     try:
-        # We override max_retries temporarily to avoid waiting on failure
-        orchestrator.max_retries = 0
+        # Allow 1 quick retry for transient upstream 503 spikes
+        orchestrator.max_retries = 1
         
         result = orchestrator.generate_structured(
             generation_type="connection_test",
@@ -101,6 +101,9 @@ def test_ai_connection():
         elif "404" in error_str or "not found" in error_str:
             status = "model_not_found"
             msg = f"Model {settings.AI_MODEL} not supported by the provider."
+        elif "503" in error_str or "overloaded" in error_str or "unavailable" in error_str:
+            status = "service_unavailable"
+            msg = "AI provider is temporarily overloaded (503). Upstream service is busy; please retry shortly."
         else:
             status = "error"
             msg = str(e)
