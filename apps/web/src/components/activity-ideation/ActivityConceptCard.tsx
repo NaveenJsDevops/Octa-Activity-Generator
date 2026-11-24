@@ -28,6 +28,7 @@ import {
   CheckCircle,
   RotateCcw,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/dateTime";
 import { exportActivityToExcel, exportActivityToPdf } from "@/lib/exportUtils";
@@ -52,6 +53,7 @@ interface Props {
   onRegenerate: () => Promise<void>;
   onApprove: () => Promise<void>;
   onReject: () => Promise<void>;
+  onDelete?: () => Promise<void>;
   onRegenerateSection?: (section: "pre_activity" | "main_activity" | "post_activity") => Promise<void>;
 }
 
@@ -74,6 +76,7 @@ export function ActivityConceptCard({
   onRegenerate,
   onApprove,
   onReject,
+  onDelete,
   onRegenerateSection,
 }: Props) {
   const [draft, setDraft] = useState<ActivityDraft | null>(null);
@@ -634,6 +637,21 @@ export function ActivityConceptCard({
                   <X className="h-3.5 w-3.5" />
                   <span>Reject</span>
                 </button>
+                {onDelete && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Are you sure you want to delete this activity concept?")) {
+                        void onDelete();
+                      }
+                    }}
+                    disabled={disabled || regeneratingSection !== null}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 shadow-2xs transition-colors"
+                    title="Delete concept from session"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete</span>
+                  </button>
+                )}
               </>
             ) : concept.status === "APPROVED" ? (
               <div className="flex flex-wrap items-center gap-2">

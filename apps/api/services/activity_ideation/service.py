@@ -1,3 +1,4 @@
+import copy
 import json
 import uuid
 from datetime import datetime
@@ -8,6 +9,7 @@ from fastapi import HTTPException
 from apps.api.models.activity_ideation import (
     ActivityConceptEditRequest,
     ActivityConceptResponse,
+    ActivityEditRequest,
     ActivityIdeationAIResponse,
     ActivityIdeationRequest,
     ActivityIdeationResult,
@@ -863,3 +865,201 @@ Regenerate a fresh POST-ACTIVITY section extending the learning for this activit
             None,
         )
         return item
+
+    def edit_activity(self, activity_id: str, req: ActivityEditRequest, username: str = "editor") -> dict:
+        activities = self.repo.read_sheet("Activities")
+        activity = next((a for a in activities if a["activity_id"] == activity_id), None)
+        if not activity:
+            raise HTTPException(status_code=404, detail="Activity not found")
+
+        old_activity = copy.deepcopy(activity)
+        update_data = req.model_dump(exclude_unset=True)
+
+        # Sync title and activity_name
+        if "activity_name" in update_data and update_data["activity_name"]:
+            update_data["title"] = update_data["activity_name"]
+        elif "title" in update_data and update_data["title"]:
+            update_data["activity_name"] = update_data["title"]
+
+        # Parse JSON sections if provided as dicts or Pydantic models
+        for sec in ("pre_activity", "main_activity", "post_activity"):
+            if sec in update_data and update_data[sec] is not None:
+                val = update_data[sec]
+                if hasattr(val, "model_dump"):
+                    update_data[sec] = val.model_dump()
+                elif isinstance(val, str):
+                    try:
+                        update_data[sec] = json.loads(val)
+                    except Exception:
+                        pass
+
+        # Update description, instructions, expected_output from sections if present
+        if "pre_activity" in update_data and isinstance(update_data["pre_activity"], dict):
+            pre_desc = update_data["pre_activity"].get("activity_description")
+            if pre_desc:
+                update_data["description"] = pre_desc
+
+        if "main_activity" in update_data and isinstance(update_data["main_activity"], dict):
+            steps = update_data["main_activity"].get("in_depth_description_and_process", [])
+            if steps and isinstance(steps, list):
+                update_data["instructions"] = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
+
+        if "post_activity" in update_data and isinstance(update_data["post_activity"], dict):
+            post_sum = update_data["post_activity"].get("post_activity_summary")
+            if post_sum:
+                update_data["expected_output"] = post_sum
+
+        update_data["updated_at"] = datetime.now().isoformat()
+
+        # Compute diffs
+        diffs = []
+        for key, new_val in update_data.items():
+            if key in ("updated_at", "created_at"):
+                continue
+            old_val = old_activity.get(key)
+            if old_val != new_val:
+                diffs.append({
+                    "field": key,
+                    "old_value": json.dumps(old_val) if isinstance(old_val, (dict, list)) else str(old_val or ""),
+                    "new_value": json.dumps(new_val) if isinstance(new_val, (dict, list)) else str(new_val or "")
+                })
+
+        # Check existing versions
+        existing_versions = [v for v in self.repo.read_sheet("ActivityVersions") if v.get("activity_id") == activity_id]
+        if not existing_versions:
+            # Baseline version 1
+            v1_data = {
+                "version_id": f"ACT-VER-{uuid.uuid4().hex[:8].upper()}",
+                "activity_id": activity_id,
+                "version_number": 1,
+                "content": json.dumps(old_activity),
+                "change_summary": "Initial baseline version",
+                "changes": json.dumps([]),
+                "created_at": old_activity.get("created_at") or datetime.now().isoformat(),
+                "created_by": "system"
+            }
+            self.repo.append_record("ActivityVersions", v1_data)
+            existing_versions = [v1_data]
+
+        # Update record in repo
+        self.repo.update_record("Activities", activity_id, update_data)
+
+        # Record new version
+        changed_fields = [d["field"].replace("_", " ").title() for d in diffs]
+        summary = f"Updated {', '.join(changed_fields[:3])}" if changed_fields else "Updated activity parameters"
+        if len(changed_fields) > 3:
+            summary += f" and {len(changed_fields) - 3} more fields"
+
+        new_v_num = len(existing_versions) + 1
+        merged_act = {**old_activity, **update_data}
+        new_ver_data = {
+            "version_id": f"ACT-VER-{uuid.uuid4().hex[:8].upper()}",
+            "activity_id": activity_id,
+            "version_number": new_v_num,
+            "content": json.dumps(merged_act),
+            "change_summary": summary,
+            "changes": json.dumps(diffs),
+            "created_at": datetime.now().isoformat(),
+            "created_by": username or "editor"
+        }
+        self.repo.append_record("ActivityVersions", new_ver_data)
+
+        return self.get_activity(activity_id)
+
+    def delete_activity(self, activity_id: str) -> bool:
+        self.repo.delete_record("Activities", activity_id)
+        self.repo.delete_records_by("ActivitySkills", {"activity_id": activity_id})
+        self.repo.delete_records_by("ActivityVersions", {"activity_id": activity_id})
+        return True
+
+    def get_activity_versions(self, activity_id: str) -> List[Dict[str, Any]]:
+        raw_versions = [v for v in self.repo.read_sheet("ActivityVersions") if v.get("activity_id") == activity_id]
+        if not raw_versions:
+            activity = next((a for a in self.repo.read_sheet("Activities") if a["activity_id"] == activity_id), None)
+            if activity:
+                v1_data = {
+                    "version_id": f"ACT-VER-{uuid.uuid4().hex[:8].upper()}",
+                    "activity_id": activity_id,
+                    "version_number": 1,
+                    "content": json.dumps(activity),
+                    "change_summary": "Initial baseline version",
+                    "changes": json.dumps([]),
+                    "created_at": activity.get("created_at") or datetime.now().isoformat(),
+                    "created_by": "system"
+                }
+                self.repo.append_record("ActivityVersions", v1_data)
+                raw_versions = [v1_data]
+
+        result = []
+        for v in raw_versions:
+            changes = []
+            if v.get("changes"):
+                try:
+                    changes = json.loads(v["changes"]) if isinstance(v["changes"], str) else v["changes"]
+                except Exception:
+                    changes = []
+            content = None
+            if v.get("content"):
+                try:
+                    content = json.loads(v["content"]) if isinstance(v["content"], str) else v["content"]
+                except Exception:
+                    content = None
+
+            created_str = v.get("created_at")
+            if isinstance(created_str, datetime):
+                created_str = created_str.isoformat()
+
+            result.append({
+                "version_id": v.get("version_id") or f"ver-{v.get('version_number')}",
+                "entity_id": v["activity_id"],
+                "version_number": v["version_number"],
+                "change_summary": v.get("change_summary") or f"Version {v['version_number']}",
+                "changes": changes,
+                "created_at": str(created_str),
+                "created_by": v.get("created_by") or "editor",
+                "content": content
+            })
+
+        result.sort(key=lambda x: x["version_number"], reverse=True)
+        return result
+
+    def restore_activity_version(self, activity_id: str, version_id: str, username: str = "editor") -> dict:
+        versions = [v for v in self.repo.read_sheet("ActivityVersions") if v.get("activity_id") == activity_id]
+        target_ver = next((v for v in versions if v.get("version_id") == version_id), None)
+        if not target_ver:
+            raise HTTPException(status_code=404, detail="Version record not found")
+
+        try:
+            content_dict = json.loads(target_ver["content"]) if isinstance(target_ver["content"], str) else target_ver["content"]
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse version snapshot: {e}")
+
+        # Protect core identity fields
+        restore_payload = {k: v for k, v in content_dict.items() if k not in ("activity_id", "created_at")}
+        restore_payload["updated_at"] = datetime.now().isoformat()
+        self.repo.update_record("Activities", activity_id, restore_payload)
+
+        new_ver_num = len(versions) + 1
+        new_ver_data = {
+            "version_id": f"ACT-VER-{uuid.uuid4().hex[:8].upper()}",
+            "activity_id": activity_id,
+            "version_number": new_ver_num,
+            "content": json.dumps({**content_dict, **restore_payload}),
+            "change_summary": f"Restored from version {target_ver.get('version_number')}",
+            "changes": json.dumps([{"field": "snapshot", "old_value": "Previous State", "new_value": f"Restored v{target_ver.get('version_number')}"}]),
+            "created_at": datetime.now().isoformat(),
+            "created_by": username or "editor"
+        }
+        self.repo.append_record("ActivityVersions", new_ver_data)
+        return self.get_activity(activity_id)
+
+    def delete_temporary_concept(self, session_id: str, concept_id: str) -> bool:
+        session = ActivityReviewSessionStore.get(session_id)
+        if session and concept_id in session.concepts:
+            del session.concepts[concept_id]
+        # Also clean from ActivityConcepts if present
+        try:
+            self.repo.delete_record("ActivityConcepts", concept_id)
+        except Exception:
+            pass
+        return True

@@ -92,6 +92,17 @@ class TopicReviewHistory(BaseModel):
     changed_at: datetime
     changed_by: str
 
+class TopicVersion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    version_id: str
+    topic_id: str
+    version_number: int
+    content: str
+    change_summary: Optional[str] = None
+    changes: Optional[str] = None
+    created_at: datetime
+    created_by: str = "editor"
+
 
 # Activity Domain
 class PreActivity(BaseModel):
@@ -315,13 +326,16 @@ class ActivitySkill(BaseModel):
     relationship_type: RelationshipType = RelationshipType.PRIMARY
 
 class ActivityVersion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     version_id: str
     activity_id: str
     version_number: int
     content: str
+    change_summary: Optional[str] = None
+    changes: Optional[str] = None
     generation_id: Optional[str] = None
     created_at: datetime
-    created_by: str
+    created_by: str = "editor"
 
 class QualityCheck(BaseModel):
     quality_check_id: str

@@ -31,6 +31,7 @@ from apps.api.models.domain import (
     TopicReviewHistory,
     TopicSkill,
     TopicSource,
+    TopicVersion,
 )
 from apps.api.core.firestore import firestore_manager
 
@@ -48,6 +49,7 @@ COLLECTION_MAPPING: Dict[str, Tuple[str, type[BaseModel], Optional[str]]] = {
     "TopicKeywords": ("topic_keywords", TopicKeyword, None),
     "TopicSources": ("topic_sources", TopicSource, "source_id"),
     "TopicReviewHistory": ("topic_review_history", TopicReviewHistory, "review_id"),
+    "TopicVersions": ("topic_versions", TopicVersion, "version_id"),
     "ActivityConcepts": ("activity_concepts", ActivityConcept, "concept_id"),
     "Activities": ("activities", Activity, "activity_id"),
     "ActivitySkills": ("activity_skills", ActivitySkill, None),

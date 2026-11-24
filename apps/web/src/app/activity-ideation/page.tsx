@@ -16,6 +16,7 @@ import {
   regenerateConcept,
   regenerateConceptSection,
   rejectConcept,
+  deleteConcept,
   selectConcept,
   TopicDetail,
   updateConcept,
@@ -372,6 +373,15 @@ function ActivityReviewContent() {
                   concept.concept_id,
                   () => rejectConcept(sessionId, concept.concept_id),
                   "Activity rejected. It was not saved.",
+                )}
+                onDelete={() => runConceptAction(
+                  concept.concept_id,
+                  async () => {
+                    await deleteConcept(sessionId, concept.concept_id);
+                    setConcepts((prev) => prev.filter((c) => c.concept_id !== concept.concept_id));
+                    return concept;
+                  },
+                  "Activity concept deleted from review session.",
                 )}
                 onRegenerateSection={(section) => runConceptAction(
                   concept.concept_id,

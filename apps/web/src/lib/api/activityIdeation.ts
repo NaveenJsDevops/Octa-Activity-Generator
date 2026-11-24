@@ -303,6 +303,20 @@ export async function rejectConcept(sessionId: string, conceptId: string): Promi
   return res.json();
 }
 
+export async function deleteConcept(sessionId: string, conceptId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/activity-ideation/sessions/${sessionId}/concepts/${conceptId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw await responseError(res, "Failed to delete concept");
+}
+
+export async function deleteActivity(activityId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/activities/${activityId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw await responseError(res, "Failed to delete activity");
+}
+
 export async function getActivities(search = "", topicId = ""): Promise<ActivityLibraryItem[]> {
   const params = new URLSearchParams();
   if (search.trim()) params.set("search", search.trim());

@@ -21,7 +21,12 @@ import {
   Filter,
   X,
   Plus,
+  Pencil,
+  Trash2,
+  History,
 } from "lucide-react";
+import VersionHistoryModal from "@/components/modals/VersionHistoryModal";
+import TopicEditModal from "@/components/modals/TopicEditModal";
 import { formatDateTime } from "@/lib/dateTime";
 import {
   fetchMasterData,
@@ -140,6 +145,32 @@ export default function TopicsPage() {
   const [sortBy, setSortBy] = useState<"NEWEST" | "OLDEST" | "TITLE_AZ" | "TITLE_ZA">("NEWEST");
   const [currentPage, setCurrentPage] = useState(1);
   const [isHydrated, setIsHydrated] = useState(false);
+
+  // Edit, Delete and Version History state
+  const [editingTopic, setEditingTopic] = useState<any | null>(null);
+  const [historyTopic, setHistoryTopic] = useState<{ id: string; title: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteTopic = async (topicId: string, topicTitle: string) => {
+    const confirmMsg = `Are you sure you want to delete "${topicTitle}"?\n\nThis will permanently delete the topic, its skill mappings, and its version history from Firestore.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingId(topicId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to delete topic: ${text}`);
+      }
+      await fetchTopics();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete topic");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Restore state from sessionStorage on mount
   useEffect(() => {
@@ -290,25 +321,37 @@ export default function TopicsPage() {
     return Array.from(set).sort();
   }, [topics]);
 
-  // Filter skills based on selected intelligence
+  // Filter skills based on selected intelligence (only show skills for the selected intelligence)
   const filteredSkillsOptions = useMemo(() => {
-    if (intelligenceFilter === "ALL") return skills;
+    if (intelligenceFilter === "ALL") return [];
     const matchIntel = intelligences.find(
       (i) => i.name.toLowerCase() === intelligenceFilter.toLowerCase()
     );
-    if (!matchIntel) return skills;
+    if (!matchIntel) return [];
     return skills.filter((s) => s.intelligence_id === matchIntel.intelligence_id);
   }, [skills, intelligences, intelligenceFilter]);
 
-  // Filter subskills based on selected skill
+  // Filter subskills based on selected skill or selected intelligence
   const filteredSubSkillsOptions = useMemo(() => {
-    if (skillFilter === "ALL") return subSkills;
-    const matchSkill = skills.find(
-      (s) => s.name.toLowerCase() === skillFilter.toLowerCase()
-    );
-    if (!matchSkill) return subSkills;
-    return subSkills.filter((ss) => ss.skill_id === matchSkill.skill_id);
-  }, [subSkills, skills, skillFilter]);
+    if (skillFilter !== "ALL") {
+      const matchSkill = skills.find(
+        (s) => s.name.toLowerCase() === skillFilter.toLowerCase()
+      );
+      if (!matchSkill) return [];
+      return subSkills.filter((ss) => ss.skill_id === matchSkill.skill_id);
+    }
+    if (intelligenceFilter !== "ALL") {
+      const matchIntel = intelligences.find(
+        (i) => i.name.toLowerCase() === intelligenceFilter.toLowerCase()
+      );
+      if (!matchIntel) return [];
+      const intelSkillIds = new Set(
+        skills.filter((s) => s.intelligence_id === matchIntel.intelligence_id).map((s) => s.skill_id)
+      );
+      return subSkills.filter((ss) => intelSkillIds.has(ss.skill_id));
+    }
+    return [];
+  }, [subSkills, skills, intelligences, skillFilter, intelligenceFilter]);
 
   // Client-side filtering and sorting
   const filteredTopics = useMemo(() => {
@@ -636,13 +679,16 @@ export default function TopicsPage() {
           {/* Skill Filter (Cascading) */}
           <select
             value={skillFilter}
+            disabled={intelligenceFilter === "ALL"}
             onChange={(e) => {
               handleFilterChange(setSkillFilter, e.target.value);
               setSubSkillFilter("ALL");
             }}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
           >
-            <option value="ALL">All Skills</option>
+            <option value="ALL">
+              {intelligenceFilter === "ALL" ? "Select Intelligence First" : `All Skills in ${intelligenceFilter}`}
+            </option>
             {filteredSkillsOptions.map((sk) => (
               <option key={sk.skill_id} value={sk.name}>
                 {sk.name}
@@ -653,10 +699,17 @@ export default function TopicsPage() {
           {/* Sub-Skill Filter (Cascading) */}
           <select
             value={subSkillFilter}
+            disabled={intelligenceFilter === "ALL" || filteredSubSkillsOptions.length === 0}
             onChange={(e) => handleFilterChange(setSubSkillFilter, e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate"
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] cursor-pointer truncate disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
           >
-            <option value="ALL">All Sub-skills</option>
+            <option value="ALL">
+              {intelligenceFilter === "ALL"
+                ? "Select Intelligence First"
+                : skillFilter !== "ALL"
+                ? `All Sub-skills in ${skillFilter}`
+                : `All Sub-skills in ${intelligenceFilter}`}
+            </option>
             {filteredSubSkillsOptions.map((ssk) => (
               <option key={ssk.sub_skill_id} value={ssk.name}>
                 {ssk.name}
@@ -954,6 +1007,33 @@ export default function TopicsPage() {
                     >
                       View →
                     </Link>
+
+                    <button
+                      onClick={() => setEditingTopic(topic)}
+                      className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-700 bg-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                      title="Edit all topic fields"
+                    >
+                      <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      onClick={() => setHistoryTopic({ id: topicId, title: topic.topic })}
+                      className="px-3 py-1.5 border border-indigo-200 hover:bg-indigo-50 text-indigo-700 bg-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                      title="View version history & restore previous snapshots"
+                    >
+                      <History className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>History</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteTopic(topicId, topic.topic)}
+                      disabled={deletingId === topicId}
+                      className="px-2.5 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 bg-white rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors shadow-2xs disabled:opacity-50"
+                      title="Delete topic"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
 
@@ -1059,6 +1139,28 @@ export default function TopicsPage() {
           </button>
         </div>
       )}
+
+      {/* Edit & Version History Modals */}
+      <TopicEditModal
+        isOpen={Boolean(editingTopic)}
+        onClose={() => setEditingTopic(null)}
+        topic={editingTopic}
+        onSaveSuccess={() => {
+          setEditingTopic(null);
+          fetchTopics();
+        }}
+      />
+
+      <VersionHistoryModal
+        isOpen={Boolean(historyTopic)}
+        onClose={() => setHistoryTopic(null)}
+        title={historyTopic?.title || "Topic"}
+        entityType="topic"
+        entityId={historyTopic?.id || ""}
+        onRestoreSuccess={() => {
+          fetchTopics();
+        }}
+      />
     </div>
   );
 }

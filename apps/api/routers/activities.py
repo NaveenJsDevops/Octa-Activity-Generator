@@ -3,7 +3,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from apps.api.core.config import settings
-from apps.api.models.activity_ideation import ActivityLibraryItem
+from apps.api.models.activity_ideation import (
+    ActivityLibraryItem,
+    ActivityEditRequest,
+    VersionItemResponse,
+)
 from apps.api.repositories.firestore import FirestoreRepository
 from apps.api.services.activity_ideation.service import ActivityIdeationService
 from apps.api.services.ai.orchestrator import AIOrchestrator
@@ -121,3 +125,38 @@ def get_activity(
     service: ActivityIdeationService = Depends(get_activity_service),
 ):
     return service.get_activity(activity_id)
+
+
+@router.patch("/{activity_id}", response_model=ActivityLibraryItem)
+def edit_activity(
+    activity_id: str,
+    req: ActivityEditRequest,
+    service: ActivityIdeationService = Depends(get_activity_service),
+):
+    return service.edit_activity(activity_id, req)
+
+
+@router.delete("/{activity_id}")
+def delete_activity(
+    activity_id: str,
+    service: ActivityIdeationService = Depends(get_activity_service),
+):
+    service.delete_activity(activity_id)
+    return {"success": True, "activity_id": activity_id, "message": "Activity deleted successfully"}
+
+
+@router.get("/{activity_id}/versions", response_model=List[VersionItemResponse])
+def get_activity_versions(
+    activity_id: str,
+    service: ActivityIdeationService = Depends(get_activity_service),
+):
+    return service.get_activity_versions(activity_id)
+
+
+@router.post("/{activity_id}/restore/{version_id}", response_model=ActivityLibraryItem)
+def restore_activity_version(
+    activity_id: str,
+    version_id: str,
+    service: ActivityIdeationService = Depends(get_activity_service),
+):
+    return service.restore_activity_version(activity_id, version_id)

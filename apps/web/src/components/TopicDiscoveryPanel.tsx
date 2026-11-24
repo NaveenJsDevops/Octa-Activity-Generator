@@ -201,17 +201,25 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
       });
   }, []);
 
-  // Filter skills based on selected intelligence (or show all if none selected)
+  // Filter skills based on selected intelligence (only show skills for the selected intelligence)
   const filteredSkills = useMemo(() => {
-    if (!selectedIntelligenceId) return skills;
+    if (!selectedIntelligenceId) return [];
     return skills.filter(s => s.intelligence_id === selectedIntelligenceId);
   }, [skills, selectedIntelligenceId]);
 
-  // Filter sub-skills based on selected skill
+  // Filter sub-skills based on selected skill or selected intelligence
   const filteredSubSkills = useMemo(() => {
-    if (!selectedSkillId) return subSkills;
-    return subSkills.filter(ss => ss.skill_id === selectedSkillId);
-  }, [subSkills, selectedSkillId]);
+    if (selectedSkillId) {
+      return subSkills.filter(ss => ss.skill_id === selectedSkillId);
+    }
+    if (selectedIntelligenceId) {
+      const allowedSkillIds = new Set(
+        skills.filter(s => s.intelligence_id === selectedIntelligenceId).map(s => s.skill_id)
+      );
+      return subSkills.filter(ss => allowedSkillIds.has(ss.skill_id));
+    }
+    return [];
+  }, [subSkills, skills, selectedSkillId, selectedIntelligenceId]);
 
   const selectedIntelligenceName = useMemo(() => {
     return intelligences.find(i => i.intelligence_id === selectedIntelligenceId)?.name;
@@ -228,31 +236,34 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
   const handleIntelligenceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newIntelId = e.target.value;
     setSelectedIntelligenceId(newIntelId);
-    if (newIntelId && selectedSkillId) {
-      const currentSkill = skills.find(s => s.skill_id === selectedSkillId);
-      if (currentSkill && currentSkill.intelligence_id !== newIntelId) {
-        setSelectedSkillId("");
-        setSelectedSubSkillId("");
-      }
-    }
+    // Reset child skill and sub-skill when intelligence changes or resets
+    setSelectedSkillId("");
+    setSelectedSubSkillId("");
   };
 
   const handleSkillChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const sId = e.target.value;
     setSelectedSkillId(sId);
-    setSelectedSubSkillId("");
-    if (sId && !selectedIntelligenceId) {
+    if (sId) {
       const match = skills.find(s => s.skill_id === sId);
-      if (match?.intelligence_id) {
+      if (match?.intelligence_id && match.intelligence_id !== selectedIntelligenceId) {
         setSelectedIntelligenceId(match.intelligence_id);
       }
+      if (selectedSubSkillId) {
+        const matchSub = subSkills.find(ss => ss.sub_skill_id === selectedSubSkillId);
+        if (matchSub && matchSub.skill_id !== sId) {
+          setSelectedSubSkillId("");
+        }
+      }
+    } else {
+      setSelectedSubSkillId("");
     }
   };
 
   const handleSubSkillChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const ssId = e.target.value;
     setSelectedSubSkillId(ssId);
-    if (ssId && !selectedSkillId) {
+    if (ssId) {
       const matchSub = subSkills.find(ss => ss.sub_skill_id === ssId);
       if (matchSub?.skill_id) {
         setSelectedSkillId(matchSub.skill_id);
@@ -728,10 +739,14 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                 id="skill"
                 value={selectedSkillId}
                 onChange={handleSkillChange}
-                disabled={generating}
+                disabled={generating || !selectedIntelligenceId}
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
               >
-                <option value="">Any skill (optional)</option>
+                <option value="">
+                  {selectedIntelligenceId
+                    ? `Any skill in ${selectedIntelligenceName || "intelligence"} (optional)`
+                    : "Select intelligence first"}
+                </option>
                 {filteredSkills.map(sk => (
                   <option key={sk.skill_id} value={sk.skill_id}>
                     {sk.name}
@@ -747,10 +762,16 @@ export default function TopicDiscoveryPanel({ onTopicsGenerated, aiConfigured }:
                 id="sub-skill"
                 value={selectedSubSkillId}
                 onChange={handleSubSkillChange}
-                disabled={generating}
+                disabled={generating || !selectedIntelligenceId || filteredSubSkills.length === 0}
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#5B50F5] focus:border-[#5B50F5] disabled:bg-slate-50 disabled:text-slate-400"
               >
-                <option value="">Any sub skill (optional)</option>
+                <option value="">
+                  {!selectedIntelligenceId
+                    ? "Select intelligence first"
+                    : selectedSkillId
+                    ? `Any sub skill in ${selectedSkillName || "skill"} (optional)`
+                    : `Any sub skill in ${selectedIntelligenceName || "intelligence"} (optional)`}
+                </option>
                 {filteredSubSkills.map(ssk => (
                   <option key={ssk.sub_skill_id} value={ssk.sub_skill_id}>
                     {ssk.name}

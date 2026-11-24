@@ -28,7 +28,10 @@ import {
   UserCheck,
   Compass,
   Loader2,
+  Trash2,
+  History,
 } from "lucide-react";
+import VersionHistoryModal from "@/components/modals/VersionHistoryModal";
 import { formatDateTime } from "@/lib/dateTime";
 
 interface EditFormState {
@@ -53,6 +56,29 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteTopic = async () => {
+    const topicName = data?.topic?.topic || "this topic";
+    const confirmMsg = `Are you sure you want to delete "${topicName}"?\n\nThis will permanently remove the topic and its version history from Firestore.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/topics/${topicId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to delete topic: ${text}`);
+      }
+      router.push("/topics/library");
+    } catch (err: any) {
+      alert(err.message || "Failed to delete topic");
+      setDeleting(false);
+    }
+  };
 
   const [editForm, setEditForm] = useState<EditFormState>({
     topic: "",
@@ -452,6 +478,24 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
                   <Edit3 className="w-4 h-4" />
                   Edit topic
                 </button>
+
+                <button
+                  onClick={() => setShowHistory(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-semibold rounded-xl text-sm transition-colors shadow-xs"
+                  title="View topic version history and rollback"
+                >
+                  <History className="w-4 h-4 text-indigo-500" />
+                  <span>Version History</span>
+                </button>
+
+                <button
+                  onClick={handleDeleteTopic}
+                  disabled={deleting}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold rounded-xl text-sm transition-colors shadow-xs disabled:opacity-50"
+                  title="Delete topic"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             )}
           </div>
@@ -742,6 +786,17 @@ export default function TopicDetailClient({ topicId }: { topicId: string }) {
           </div>
         )}
       </div>
+
+      <VersionHistoryModal
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        title={topic.topic || "Topic"}
+        entityType="topic"
+        entityId={topicId}
+        onRestoreSuccess={() => {
+          fetchDetail();
+        }}
+      />
     </div>
   );
 }

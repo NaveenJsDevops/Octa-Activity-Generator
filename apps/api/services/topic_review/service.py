@@ -1,9 +1,10 @@
+import json
 import uuid
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 from apps.api.repositories.firestore import FirestoreRepository
-from apps.api.models.domain import Topic, TopicStatus, TopicReviewHistory, TopicSkill, TopicKeyword, Skill, SubSkill
+from apps.api.models.domain import Topic, TopicStatus, TopicReviewHistory, TopicVersion, TopicSkill, TopicKeyword, Skill, SubSkill
 from apps.api.models.enums import ActivityPotential
 from apps.api.models.topic_review import TopicListFilter, TopicEditRequest
 from apps.api.services.topic_discovery.skill_resolver import SkillResolver
@@ -24,6 +25,12 @@ class TopicReviewService:
     def _get_topic_by_id(self, topic_id: str) -> Optional[Topic]:
         for t in self.topics:
             if t.topic_id == topic_id:
+                return t
+        # Fallback to reading from repository
+        for t_dict in self.repo.read_sheet("Topics"):
+            if t_dict.get("topic_id") == topic_id:
+                t = Topic(**t_dict)
+                self.topics.append(t)
                 return t
         return None
 
@@ -198,6 +205,10 @@ class TopicReviewService:
         # Only certain statuses can be edited. e.g. DRAFT, REVIEW, APPROVED.
         if topic.status in (TopicStatus.REJECTED, TopicStatus.ARCHIVED):
             return False, f"Cannot edit topic in {topic.status} state"
+
+        # Capture old state snapshot for diff & versioning
+        old_topic_dict = topic.model_dump(mode="json")
+        old_keywords = [tk.keyword for tk in self.topic_keywords if tk.topic_id == topic_id]
             
         # Apply updates
         update_data = edit_req.model_dump(exclude_unset=True)
@@ -245,6 +256,62 @@ class TopicReviewService:
                 kw_data = {"topic_id": topic_id, "keyword": kw}
                 self.repo.append_record("TopicKeywords", kw_data)
                 self.topic_keywords.append(TopicKeyword(**kw_data))
+
+        # --- VERSION TRACKER RECORDING ---
+        new_topic_dict = topic.model_dump(mode="json")
+        diffs = []
+        for key in set(old_topic_dict.keys()).union(new_topic_dict.keys()):
+            if key in ("updated_at", "created_at"):
+                continue
+            old_val = old_topic_dict.get(key)
+            new_val = new_topic_dict.get(key)
+            if old_val != new_val:
+                diffs.append({
+                    "field": key,
+                    "old_value": str(old_val) if old_val is not None else "None",
+                    "new_value": str(new_val) if new_val is not None else "None"
+                })
+
+        if keywords_update is not None and set(keywords_update) != set(old_keywords):
+            diffs.append({
+                "field": "keywords",
+                "old_value": ", ".join(old_keywords) if old_keywords else "None",
+                "new_value": ", ".join(keywords_update) if keywords_update else "None"
+            })
+
+        existing_versions = [v for v in self.repo.read_sheet("TopicVersions") if v.get("topic_id") == topic_id]
+        if not existing_versions:
+            # Record baseline version 1
+            v1_data = {
+                "version_id": f"TOP-VER-{uuid.uuid4().hex[:8].upper()}",
+                "topic_id": topic_id,
+                "version_number": 1,
+                "content": json.dumps(old_topic_dict),
+                "change_summary": "Initial baseline version",
+                "changes": json.dumps([]),
+                "created_at": topic.created_at or datetime.now(),
+                "created_by": "system"
+            }
+            self.repo.append_record("TopicVersions", v1_data)
+            existing_versions = [v1_data]
+
+        changed_names = [d["field"].replace("_", " ").title() for d in diffs]
+        summary = f"Updated {', '.join(changed_names[:3])}" if changed_names else "Updated topic fields"
+        if len(changed_names) > 3:
+            summary += f" and {len(changed_names) - 3} more fields"
+
+        new_v_num = len(existing_versions) + 1
+        new_ver_data = {
+            "version_id": f"TOP-VER-{uuid.uuid4().hex[:8].upper()}",
+            "topic_id": topic_id,
+            "version_number": new_v_num,
+            "content": json.dumps(new_topic_dict),
+            "change_summary": summary,
+            "changes": json.dumps(diffs),
+            "created_at": datetime.now(),
+            "created_by": self.user_id or "editor"
+        }
+        self.repo.append_record("TopicVersions", new_ver_data)
             
         return True, "Topic updated successfully"
 
@@ -307,9 +374,103 @@ class TopicReviewService:
             
         try:
             self.repo.delete_record("Topics", topic_id)
-            # Remove it from the in-memory cache as well
+            # Remove from in-memory caches and delete related items
             self.topics = [t for t in self.topics if t.topic_id != topic_id]
+            self.repo.delete_records_by("TopicKeywords", {"topic_id": topic_id})
+            self.topic_keywords = [tk for tk in self.topic_keywords if tk.topic_id != topic_id]
+            self.repo.delete_records_by("TopicSkills", {"topic_id": topic_id})
+            self.topic_skills = [ts for ts in self.topic_skills if ts.topic_id != topic_id]
+            self.repo.delete_records_by("TopicVersions", {"topic_id": topic_id})
             self._log_history(topic_id, "DELETE", topic.status, topic.status)
             return True, "Topic deleted successfully"
         except ValueError as e:
             return False, str(e)
+
+    def get_topic_versions(self, topic_id: str) -> List[Dict[str, Any]]:
+        raw_versions = [v for v in self.repo.read_sheet("TopicVersions") if v.get("topic_id") == topic_id]
+        if not raw_versions:
+            topic = self._get_topic_by_id(topic_id)
+            if topic:
+                v1_data = {
+                    "version_id": f"TOP-VER-{uuid.uuid4().hex[:8].upper()}",
+                    "topic_id": topic_id,
+                    "version_number": 1,
+                    "content": json.dumps(topic.model_dump(mode="json")),
+                    "change_summary": "Initial baseline version",
+                    "changes": json.dumps([]),
+                    "created_at": topic.created_at or datetime.now(),
+                    "created_by": "system"
+                }
+                self.repo.append_record("TopicVersions", v1_data)
+                raw_versions = [v1_data]
+
+        result = []
+        for v in raw_versions:
+            changes = []
+            if v.get("changes"):
+                try:
+                    changes = json.loads(v["changes"]) if isinstance(v["changes"], str) else v["changes"]
+                except Exception:
+                    changes = []
+            content = None
+            if v.get("content"):
+                try:
+                    content = json.loads(v["content"]) if isinstance(v["content"], str) else v["content"]
+                except Exception:
+                    content = None
+            
+            created_str = v.get("created_at")
+            if isinstance(created_str, datetime):
+                created_str = created_str.isoformat()
+
+            result.append({
+                "version_id": v.get("version_id") or f"ver-{v.get('version_number')}",
+                "entity_id": v["topic_id"],
+                "version_number": v["version_number"],
+                "change_summary": v.get("change_summary") or f"Version {v['version_number']}",
+                "changes": changes,
+                "created_at": str(created_str),
+                "created_by": v.get("created_by") or "editor",
+                "content": content
+            })
+
+        result.sort(key=lambda x: x["version_number"], reverse=True)
+        return result
+
+    def restore_topic_version(self, topic_id: str, version_id: str) -> Tuple[bool, str]:
+        topic = self._get_topic_by_id(topic_id)
+        if not topic:
+            return False, "Topic not found"
+            
+        versions = [v for v in self.repo.read_sheet("TopicVersions") if v.get("topic_id") == topic_id]
+        target_ver = next((v for v in versions if v.get("version_id") == version_id), None)
+        if not target_ver:
+            return False, "Version record not found"
+
+        try:
+            content_dict = json.loads(target_ver["content"]) if isinstance(target_ver["content"], str) else target_ver["content"]
+        except Exception as e:
+            return False, f"Failed to parse version snapshot: {e}"
+
+        topic_fields = set(Topic.model_fields.keys())
+        for k, v in content_dict.items():
+            if k in topic_fields and k not in ("topic_id", "created_at"):
+                setattr(topic, k, v)
+
+        topic.updated_at = datetime.now()
+        self._update_topic(topic)
+        
+        new_ver_num = len(versions) + 1
+        new_ver_data = {
+            "version_id": f"TOP-VER-{uuid.uuid4().hex[:8].upper()}",
+            "topic_id": topic_id,
+            "version_number": new_ver_num,
+            "content": json.dumps(topic.model_dump(mode="json")),
+            "change_summary": f"Restored from version {target_ver.get('version_number')}",
+            "changes": json.dumps([{"field": "snapshot", "old_value": "Current State", "new_value": f"Restored v{target_ver.get('version_number')}"}]),
+            "created_at": datetime.now(),
+            "created_by": self.user_id or "editor"
+        }
+        self.repo.append_record("TopicVersions", new_ver_data)
+        self._log_history(topic_id, "RESTORE", topic.status, topic.status, f"Restored v{target_ver.get('version_number')}")
+        return True, f"Successfully restored topic to version {target_ver.get('version_number')}"

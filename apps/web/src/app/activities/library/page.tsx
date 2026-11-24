@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -25,9 +25,14 @@ import {
   ChevronDown,
   Layers,
   Settings2,
+  Pencil,
+  Trash2,
+  History,
 } from "lucide-react";
-import { ActivityLibraryItem, getActivities } from "@/lib/api/activityIdeation";
+import { ActivityLibraryItem, getActivities, deleteActivity } from "@/lib/api/activityIdeation";
 import { ActivityTemplateView } from "@/components/activity-ideation/ActivityTemplateView";
+import VersionHistoryModal from "@/components/modals/VersionHistoryModal";
+import ActivityEditModal from "@/components/modals/ActivityEditModal";
 import { formatDateTime } from "@/lib/dateTime";
 import {
   ExportOptions,
@@ -173,12 +178,40 @@ export default function ActivityLibraryPage() {
     currentPage,
   ]);
 
+  // Edit, Delete and Version History state
+  const [editingActivity, setEditingActivity] = useState<any | null>(null);
+  const [historyActivity, setHistoryActivity] = useState<{ id: string; title: string } | null>(null);
+  const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
+
+  const loadActivities = useCallback(async () => {
+    try {
+      const data = await getActivities();
+      setActivities(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load activities");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleDeleteActivity = async (activityId: string, activityTitle: string) => {
+    const confirmMsg = `Are you sure you want to delete "${activityTitle}"?\n\nThis will permanently delete the activity, its skill mappings, and its version history from Firestore.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingActivityId(activityId);
+    try {
+      await deleteActivity(activityId);
+      await loadActivities();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete activity");
+    } finally {
+      setDeletingActivityId(null);
+    }
+  };
+
   // Load activities and master data
   useEffect(() => {
-    getActivities()
-      .then(setActivities)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load activities"))
-      .finally(() => setLoading(false));
+    loadActivities();
 
     fetchMasterData()
       .then((data) => {
@@ -187,7 +220,7 @@ export default function ActivityLibraryPage() {
         if (data.subSkills?.length) setSubSkills(data.subSkills);
       })
       .catch(() => {});
-  }, []);
+  }, [loadActivities]);
 
   // Debounce search query
   useEffect(() => {
@@ -208,25 +241,37 @@ export default function ActivityLibraryPage() {
     [activities]
   );
 
-  // Filter skills based on selected intelligence
+  // Filter skills based on selected intelligence (only show skills for the selected intelligence)
   const filteredSkillsOptions = useMemo(() => {
-    if (intelligenceFilter === "ALL") return skills;
+    if (intelligenceFilter === "ALL") return [];
     const matchIntel = intelligences.find(
       (i) => i.name.toLowerCase() === intelligenceFilter.toLowerCase()
     );
-    if (!matchIntel) return skills;
+    if (!matchIntel) return [];
     return skills.filter((s) => s.intelligence_id === matchIntel.intelligence_id);
   }, [skills, intelligences, intelligenceFilter]);
 
-  // Filter subskills based on selected skill
+  // Filter subskills based on selected skill or selected intelligence
   const filteredSubSkillsOptions = useMemo(() => {
-    if (skillFilter === "ALL") return subSkills;
-    const matchSkill = skills.find(
-      (s) => s.name.toLowerCase() === skillFilter.toLowerCase()
-    );
-    if (!matchSkill) return subSkills;
-    return subSkills.filter((ss) => ss.skill_id === matchSkill.skill_id);
-  }, [subSkills, skills, skillFilter]);
+    if (skillFilter !== "ALL") {
+      const matchSkill = skills.find(
+        (s) => s.name.toLowerCase() === skillFilter.toLowerCase()
+      );
+      if (!matchSkill) return [];
+      return subSkills.filter((ss) => ss.skill_id === matchSkill.skill_id);
+    }
+    if (intelligenceFilter !== "ALL") {
+      const matchIntel = intelligences.find(
+        (i) => i.name.toLowerCase() === intelligenceFilter.toLowerCase()
+      );
+      if (!matchIntel) return [];
+      const intelSkillIds = new Set(
+        skills.filter((s) => s.intelligence_id === matchIntel.intelligence_id).map((s) => s.skill_id)
+      );
+      return subSkills.filter((ss) => intelSkillIds.has(ss.skill_id));
+    }
+    return [];
+  }, [subSkills, skills, intelligences, skillFilter, intelligenceFilter]);
 
   // Client-side filtering and sorting
   const filtered = useMemo(() => {
@@ -592,13 +637,16 @@ export default function ActivityLibraryPage() {
           {/* Skill Filter (Cascading) */}
           <select
             value={skillFilter}
+            disabled={intelligenceFilter === "ALL"}
             onChange={(e) => {
               handleFilterChange(setSkillFilter, e.target.value);
               setSubSkillFilter("ALL");
             }}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium text-slate-700 outline-none focus:bg-white focus:border-[#5B50F5] cursor-pointer truncate"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium text-slate-700 outline-none focus:bg-white focus:border-[#5B50F5] cursor-pointer truncate disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
           >
-            <option value="ALL">All Skills</option>
+            <option value="ALL">
+              {intelligenceFilter === "ALL" ? "Select Intelligence First" : `All Skills in ${intelligenceFilter}`}
+            </option>
             {filteredSkillsOptions.map((sk) => (
               <option key={sk.skill_id} value={sk.name}>
                 {sk.name}
@@ -609,10 +657,17 @@ export default function ActivityLibraryPage() {
           {/* Sub-Skill Filter (Cascading) */}
           <select
             value={subSkillFilter}
+            disabled={intelligenceFilter === "ALL" || filteredSubSkillsOptions.length === 0}
             onChange={(e) => handleFilterChange(setSubSkillFilter, e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium text-slate-700 outline-none focus:bg-white focus:border-[#5B50F5] cursor-pointer truncate"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium text-slate-700 outline-none focus:bg-white focus:border-[#5B50F5] cursor-pointer truncate disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
           >
-            <option value="ALL">All Sub-skills</option>
+            <option value="ALL">
+              {intelligenceFilter === "ALL"
+                ? "Select Intelligence First"
+                : skillFilter !== "ALL"
+                ? `All Sub-skills in ${skillFilter}`
+                : `All Sub-skills in ${intelligenceFilter}`}
+            </option>
             {filteredSubSkillsOptions.map((ssk) => (
               <option key={ssk.sub_skill_id} value={ssk.name}>
                 {ssk.name}
@@ -1061,6 +1116,33 @@ export default function ActivityLibraryPage() {
                         }`}
                       />
                     </button>
+
+                    <button
+                      onClick={() => setEditingActivity(item)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+                      title="Edit all activity parameters & sections"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      onClick={() => setHistoryActivity({ id: act.activity_id, title: act.activity_name || act.title })}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-colors shadow-2xs"
+                      title="View version history & restore previous snapshots"
+                    >
+                      <History className="h-3.5 w-3.5 text-purple-600" />
+                      <span>History</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteActivity(act.activity_id, act.activity_name || act.title)}
+                      disabled={deletingActivityId === act.activity_id}
+                      className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors shadow-2xs disabled:opacity-50"
+                      title="Delete activity"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
 
@@ -1203,6 +1285,29 @@ export default function ActivityLibraryPage() {
           </button>
         </div>
       )}
+
+      {/* Activity Edit Modal */}
+      <ActivityEditModal
+        isOpen={Boolean(editingActivity)}
+        onClose={() => setEditingActivity(null)}
+        activityData={editingActivity}
+        onSaveSuccess={() => {
+          setEditingActivity(null);
+          loadActivities();
+        }}
+      />
+
+      {/* Version History Modal */}
+      <VersionHistoryModal
+        isOpen={Boolean(historyActivity)}
+        onClose={() => setHistoryActivity(null)}
+        title={historyActivity?.title || "Activity"}
+        entityType="activity"
+        entityId={historyActivity?.id || ""}
+        onRestoreSuccess={() => {
+          loadActivities();
+        }}
+      />
     </div>
   );
 }

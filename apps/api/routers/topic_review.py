@@ -6,6 +6,7 @@ from apps.api.models.topic_review import (
     TopicEditRequest, RejectTopicRequest, SelectTopicsRequest,
     TopicActionResponse, BulkTopicActionResponse
 )
+from apps.api.models.activity_ideation import VersionItemResponse
 from apps.api.models.domain import TopicStatus
 from apps.api.services.topic_review.service import TopicReviewService
 from apps.api.repositories.firestore import FirestoreRepository
@@ -115,3 +116,14 @@ def delete_topic(topic_id: str, service: TopicReviewService = Depends(get_topic_
     if not success:
         raise HTTPException(status_code=400, detail=msg)
     return TopicActionResponse(success=True, topic_id=topic_id, new_status="DELETED", message=msg)
+
+@router.get("/{topic_id}/versions", response_model=List[VersionItemResponse])
+def get_topic_versions(topic_id: str, service: TopicReviewService = Depends(get_topic_review_service)):
+    return service.get_topic_versions(topic_id)
+
+@router.post("/{topic_id}/restore/{version_id}", response_model=TopicActionResponse)
+def restore_topic_version(topic_id: str, version_id: str, service: TopicReviewService = Depends(get_topic_review_service)):
+    success, msg = service.restore_topic_version(topic_id, version_id)
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return TopicActionResponse(success=True, topic_id=topic_id, new_status="RESTORED", message=msg)

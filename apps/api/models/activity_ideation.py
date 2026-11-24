@@ -111,6 +111,9 @@ class ActivityIdeationResult(BaseModel):
 class ActivityConceptEditRequest(BaseModel):
     activity_name: Optional[str] = Field(default=None, min_length=3, max_length=160)
     activity_duration: Optional[str] = Field(default=None, min_length=1)
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    target_class: Optional[str] = None
     pre_activity: Optional[PreActivity] = None
     main_activity: Optional[MainActivity] = None
     post_activity: Optional[PostActivity] = None
@@ -129,6 +132,49 @@ class ActivityConceptEditRequest(BaseModel):
     assessment_criteria: Optional[str] = None
     estimated_duration: Optional[int] = Field(default=None, ge=5, le=180)
     difficulty_level: Optional[str] = None
+
+
+class ActivityEditRequest(BaseModel):
+    activity_name: Optional[str] = None
+    title: Optional[str] = None
+    activity_duration: Optional[str] = None
+    estimated_duration: Optional[int] = None
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    target_class: Optional[str] = None
+    country_context: Optional[str] = None
+    topic_family_name: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    user_selected_intelligence: Optional[str] = None
+    user_selected_skills: Optional[List[str]] = None
+    user_selected_sub_skills: Optional[List[str]] = None
+    suggested_intelligence: Optional[str] = None
+    suggested_skills: Optional[List[str]] = None
+    suggested_sub_skills: Optional[List[str]] = None
+    learning_objective: Optional[str] = None
+    materials: Optional[List[str]] = None
+    assessment_criteria: Optional[str] = None
+    difficulty_level: Optional[str] = None
+    pre_activity: Optional[Any] = None
+    main_activity: Optional[Any] = None
+    post_activity: Optional[Any] = None
+
+
+class VersionDiffItem(BaseModel):
+    field: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+
+
+class VersionItemResponse(BaseModel):
+    version_id: str
+    entity_id: str
+    version_number: int
+    change_summary: Optional[str] = None
+    changes: List[VersionDiffItem] = Field(default_factory=list)
+    created_at: str
+    created_by: str = "editor"
+    content: Optional[Dict[str, Any]] = None
 
 
 class ActivityLibraryItem(BaseModel):

@@ -156,3 +156,14 @@ def reject_concept(
     service: ActivityIdeationService = Depends(get_ideation_service),
 ):
     return service.reject_concept(session_id, concept_id)
+
+@router.delete(
+    "/sessions/{session_id}/concepts/{concept_id}",
+)
+def delete_concept(
+    session_id: str,
+    concept_id: str,
+    service: ActivityIdeationService = Depends(get_ideation_service),
+):
+    service.delete_temporary_concept(session_id, concept_id)
+    return {"success": True, "concept_id": concept_id, "message": "Concept deleted successfully"}
