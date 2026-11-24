@@ -33,6 +33,7 @@ from apps.api.models.domain import (
     TopicSource,
     TopicVersion,
 )
+from apps.api.core.config import settings
 from apps.api.core.firestore import firestore_manager
 
 logger = logging.getLogger("octa.repository")
@@ -69,13 +70,20 @@ class FirestoreRepository:
 
     def __init__(self, data_dir: Optional[str] = None):
         self.data_dir = str(data_dir or "data")
-        # Check if running in isolated test mode
-        self._is_isolated_test = bool(
-            os.getenv("PYTEST_CURRENT_TEST")
-            or os.getenv("TESTING") == "1"
-            or (self.data_dir != "data" and not self.data_dir.endswith("/data"))
-            or any(part in self.data_dir.lower() for part in ["tmp", "temp", "pytest", "var/folders"])
+        # Check if running in isolated test mode (production always connects and warms from Firestore)
+        is_prod = (
+            (os.getenv("ENVIRONMENT") or "").lower() == "production"
+            or getattr(settings, "ENVIRONMENT", "").lower() == "production"
         )
+        if is_prod:
+            self._is_isolated_test = False
+        else:
+            self._is_isolated_test = bool(
+                os.getenv("PYTEST_CURRENT_TEST")
+                or os.getenv("TESTING") == "1"
+                or (self.data_dir != "data" and not self.data_dir.endswith("/data"))
+                or any(part in self.data_dir.lower() for part in ["tmp", "temp", "pytest", "var/folders"])
+            )
 
         with FirestoreRepository._lock:
             if self.data_dir not in FirestoreRepository._storage_by_dir:
